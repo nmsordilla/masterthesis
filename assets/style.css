@@ -105,15 +105,15 @@ section.hero { border-top: 0; padding-top: 2rem; }
 /* Gantt */
 .gantt-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
 .gantt { position: relative; min-width: 760px; padding: 0 0 .5rem; }
-.g-months { display: grid; margin-left: 210px; border-bottom: 1px solid var(--border); }
+.g-months { display: grid; margin-left: 250px; border-bottom: 1px solid var(--border); }
 .g-month { font-size: .75rem; color: var(--muted); padding: .5rem .35rem; border-left: 1px solid var(--border); white-space: nowrap; overflow: hidden; }
 .g-row { display: flex; align-items: center; height: 34px; }
-.g-label { width: 210px; flex: none; padding: 0 .75rem; font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.g-label { width: 250px; flex: none; padding: 0 .75rem; font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .g-track { position: relative; flex: 1; height: 100%; }
 .g-bar { position: absolute; top: 8px; height: 18px; border-radius: 5px; overflow: hidden; background: color-mix(in srgb, var(--c) 28%, transparent); border: 1px solid var(--c); }
 .g-bar .fill { height: 100%; background: var(--c); }
 .g-bar.milestone { border-style: dashed; }
-.g-overlay { position: absolute; top: 0; bottom: 0; left: 210px; right: 0; pointer-events: none; }
+.g-overlay { position: absolute; top: 0; bottom: 0; left: 250px; right: 0; pointer-events: none; }
 .g-grid { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--border); opacity: .6; }
 .g-break { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--muted) 14%, transparent) 6px 8px); }
 .g-today { position: absolute; top: 0; bottom: 0; border-left: 2px dashed var(--today); }
