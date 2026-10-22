@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Thesis Plan · LLM Priors</title>
+  <meta name="description" content="Master thesis plan: using large language models to generate Bayesian prior distributions for predictions of clinical trial outcomes (KU Leuven, 2026–2027).">
+  <link rel="stylesheet" href="assets/style.css">
+  <script src="data/plan.js" defer></script>
+  <script src="assets/app.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="#top">Thesis Plan</a>
+      <nav class="nav" aria-label="Sections">
+        <a href="#overview">Overview</a>
+        <a href="#timeline">Timeline</a>
+        <a href="#work">Work plan</a>
+        <a href="#method">Method</a>
+        <a href="#presentations">Presentations</a>
+        <a href="#background">Background</a>
+        <a href="#risks">Risks</a>
+        <a href="#meetings">Meetings</a>
+        <a href="#log">Log</a>
+        <a href="#reading">Reading</a>
+      </nav>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle dark mode">◐</button>
+    </div>
+  </header>
+
+  <main id="top" class="wrap">
+    <!-- HERO -->
+    <section class="hero">
+      <p class="eyebrow">Master thesis · KU Leuven · 2026–2027</p>
+      <h1 id="thesisTitle">Using large language models to generate Bayesian prior distributions for predictions of clinical trial outcomes</h1>
+      <dl class="people" id="people"></dl>
+      <div class="countdowns" id="countdowns"></div>
+      <p class="updated">Plan last updated <span id="lastUpdated"></span></p>
+    </section>
+
+    <!-- OVERVIEW -->
+    <section id="overview">
+      <h2>Overview</h2>
+      <div class="lead">
+        <p>Interim analyses can stop a failing trial early by computing the <strong>predictive probability of success (PPoS)</strong>. Early on, when little data has accrued, the prior on the treatment effect dominates that number, so a bad prior gives a bad futility signal exactly when it matters most. Building good priors today means slow expert elicitation (e.g. SHELF) plus heavy documentation for regulators.</p>
+        <p>This thesis tests whether LLMs can produce priors that are accurate, well documented and regulator-ready, and quantifies what they do to futility detection.</p>
+      </div>
+
+      <div class="goals">
+        <article class="goal sg1">
+          <span class="tag">Sub-goal 1</span>
+          <h3>Accuracy</h3>
+          <p>Benchmark LLM-generated priors against a gold-standard reference prior.</p>
+        </article>
+        <article class="goal sg2">
+          <span class="tag">Sub-goal 2</span>
+          <h3>Documentation</h3>
+          <p>Can the LLM write a rationale, with real references, good enough to cut the manual documentation burden?</p>
+        </article>
+        <article class="goal sg3">
+          <span class="tag">Sub-goal 3</span>
+          <h3>Futility impact</h3>
+          <p>How does the prior (LLM vs uninformative vs expert-elicited) change the performance of the group's futility prediction model?</p>
+        </article>
+      </div>
+
+      <div class="callout">
+        <strong>The gap this thesis fills.</strong> LLM-elicited priors have been studied for regression and hierarchical models, but nobody has yet measured how an LLM prior changes a PPoS futility decision, which is where the prior matters most because <em>n</em> is small.
+      </div>
+    </section>
+
+    <!-- TIMELINE -->
+    <section id="timeline">
+      <h2>Timeline</h2>
+      <p class="muted">October 2026 → June 2027. The dashed line is today. Dates marked <span class="pill tbc">TBC</span> still need confirming with the faculty or supervisors.</p>
+      <div class="gantt-scroll">
+        <div class="gantt" id="gantt" role="img" aria-label="Gantt chart of thesis phases"></div>
+      </div>
+      <h3>Key dates</h3>
+      <ol class="milestones" id="milestones"></ol>
+    </section>
+
+    <!-- WORK PLAN -->
+    <section id="work">
+      <h2>Work plan &amp; progress</h2>
+      <div class="overall" id="overall"></div>
+      <div class="filters" role="group" aria-label="Filter tasks">
+        <button type="button" data-filter="all" class="active">All</button>
+        <button type="button" data-filter="open">Open</button>
+        <button type="button" data-filter="doing">In progress</button>
+        <button type="button" data-filter="overdue">Overdue</button>
+        <button type="button" data-filter="done">Done</button>
+      </div>
+      <div id="phases"></div>
+    </section>
+
+    <!-- METHOD -->
+    <section id="method">
+      <h2>Methodology</h2>
+      <p class="muted">The three sub-goals are three tests applied to the same LLM-generated prior. Only the third needs the group's futility model, so sub-goals 1 and 2 can start before access to it.</p>
+
+      <div class="flow" aria-label="Pipeline">
+        <div class="flow-step"><b>Trial description</b><span>indication, endpoint, design, phase II evidence</span></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step"><b>LLM elicitation</b><span>strategy × model × repeats, all calls logged</span></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step"><b>Prior + rationale</b><span>quantiles → fitted distribution, cited evidence</span></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step split">
+          <span class="chip sg1">SG1 accuracy vs gold standard</span>
+          <span class="chip sg2">SG2 references + expert review</span>
+          <span class="chip sg3">SG3 PPoS futility simulation</span>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <article class="card">
+          <h3>1 · Gold-standard reference</h3>
+          <p>A published trial protocol that reports its own pre-specified priors; otherwise the outcome of an in-house BREATHE trial. Prefer several reference trials, and trials completed <em>after</em> the LLMs' knowledge cutoffs, so an "accurate" prior is not just recall.</p>
+        </article>
+        <article class="card">
+          <h3>2 · Prompting strategies &amp; models</h3>
+          <ul>
+            <li>Direct zero-shot instruction</li>
+            <li>Riegler et al. structured prompt (simulated literature review)</li>
+            <li>Chain-of-thought over the treatment mechanism</li>
+            <li>Self-consistency: sample <em>k</em> priors, pool as a mixture (AutoElicit-style)</li>
+            <li>Retrieval-grounded on PubMed / ClinicalTrials.gov</li>
+            <li>Simulated SHELF panel: several LLM "experts" + facilitator LLM</li>
+          </ul>
+          <p>Models: GPT, Gemini, Claude (+ an open-weight model if trial data cannot leave UZ Leuven). Elicit 5th/50th/95th percentiles, then fit the parametric family SHELF-style rather than asking for σ directly.</p>
+        </article>
+        <article class="card">
+          <h3>3 · Rationale &amp; hallucination detection</h3>
+          <p>Every prior comes with a written rationale and references. Check: does each reference exist (DOI / PMID / NCT resolves)? Does it support the claim it is cited for? Does this step catch unsupported priors before they are used?</p>
+        </article>
+        <article class="card">
+          <h3>4 · Expert &amp; regulatory review</h3>
+          <p>At least one expert statistician scores the documentation, independent of numeric accuracy, against a rubric aligned with the FDA draft guidance (Jan 2026): pre-specified, centre justified, width justified, borrowing / discounting explained, sensitivity discussed, reproducible.</p>
+        </article>
+        <article class="card wide">
+          <h3>5 · Downstream impact on futility detection</h3>
+          <p>Integrate the best-performing strategy into the group's futility prediction model. On simulated truly-futile and truly-effective trials, compare LLM, uninformative and expert-elicited priors on stopping time, correct-stop rate and wrong-stop rate, including under prior–data conflict.</p>
+        </article>
+      </div>
+
+      <h3>Evaluation metrics</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Sub-goal</th><th>Metric</th><th>What it captures</th></tr></thead>
+          <tbody>
+            <tr><td rowspan="5"><span class="chip sg1">SG1</span></td><td>KL divergence (both directions)</td><td>Penalises over- vs under-confidence asymmetrically</td></tr>
+            <tr><td>Wasserstein distance</td><td>Location + spread error on the effect scale</td></tr>
+            <tr><td>Density overlap</td><td>Bounded, interpretable similarity</td></tr>
+            <tr><td>90% interval coverage of reference effect</td><td>Calibration</td></tr>
+            <tr><td>ESS ratio vs gold standard</td><td>How much information the prior claims (key for early PPoS)</td></tr>
+            <tr><td rowspan="3"><span class="chip sg2">SG2</span></td><td>% references that exist</td><td>Fabricated citations</td></tr>
+            <tr><td>% references that support the claim</td><td>Misattributed evidence</td></tr>
+            <tr><td>Expert rubric score</td><td>Regulator-readiness of the rationale</td></tr>
+            <tr><td rowspan="3"><span class="chip sg3">SG3</span></td><td>Stopping time (patients / looks)</td><td>How early futility is detected</td></tr>
+            <tr><td>Correct-stop rate (futile trials)</td><td>Sensitivity of the futility rule</td></tr>
+            <tr><td>Wrong-stop rate (effective trials)</td><td>Cost: killing a working treatment</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Reproducibility checklist</h3>
+      <ul class="checklist">
+        <li>Log model name + version/snapshot, temperature, top-p, seed, full prompt and raw response for every call</li>
+        <li>Pin package versions; store fitted priors and simulation seeds with the code</li>
+        <li>Version prompts in git; one config file per experiment</li>
+        <li>Record API dates (closed models change under you)</li>
+      </ul>
+    </section>
+
+    <!-- PRESENTATIONS -->
+    <section id="presentations">
+      <h2>Presentations</h2>
+      <div class="grid2">
+        <article class="card pres">
+          <p class="eyebrow">February 2027</p>
+          <h3>Intermediate presentation</h3>
+          <p class="muted">Show a well-motivated design, a working pipeline and first evidence.</p>
+          <ul class="checklist">
+            <li>Problem + motivation: prior dominance at early interim looks (one figure)</li>
+            <li>Background: PPoS, priors, SHELF, FDA 2026 draft, LLM elicitation literature</li>
+            <li>Chosen gold-standard trial(s) and leakage controls</li>
+            <li>Pipeline demo: strategies × models, logging</li>
+            <li>Preliminary SG1 results (accuracy, calibration, variability across runs)</li>
+            <li>SG2 design: reference checker + expert rubric</li>
+            <li>SG3 plan: how the futility model will be used</li>
+            <li>Remaining timeline and risks</li>
+          </ul>
+        </article>
+        <article class="card pres">
+          <p class="eyebrow">June 2027</p>
+          <h3>Final defense</h3>
+          <p class="muted">Answer the main question with all three sub-goals.</p>
+          <ul class="checklist">
+            <li>Main answer: can LLMs produce accurate, documented, regulator-ready priors?</li>
+            <li>SG1: best strategy / model, calibration findings</li>
+            <li>SG2: hallucination rates, expert verdict on documentation</li>
+            <li>SG3: effect on futility detection vs flat and expert priors</li>
+            <li>Practical recommendation for trial teams + limitations</li>
+            <li>GenAI usage statement (KU Leuven code of conduct)</li>
+            <li>Anticipated questions: leakage, reproducibility, regulator acceptance, n of reference trials</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <!-- BACKGROUND -->
+    <section id="background">
+      <h2>Background notes</h2>
+
+      <details open>
+        <summary>Clinical trials &amp; interim futility</summary>
+        <p>A trial randomises patients to a new treatment or a control, measures a pre-specified endpoint and tests whether the difference is larger than chance. The thesis lives in one moment: the <strong>interim analysis</strong>, where a data monitoring committee decides whether to continue.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Interim quantity</th><th>Definition</th><th>Role of the prior</th></tr></thead>
+            <tbody>
+              <tr><td>Conditional power</td><td>P(final success) assuming θ equals one fixed value</td><td>None; ignores uncertainty about θ</td></tr>
+              <tr><td>Predictive probability (PPoS)</td><td>Conditional power averaged over p(θ | interim data)</td><td>Enters through the posterior; dominant early</td></tr>
+              <tr><td>Posterior probability</td><td>P(θ &gt; threshold | data) <em>now</em></td><td>Direct</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="formula">PPoS = ∫ P(success at final analysis | θ, D) · p(θ | D) dθ</div>
+        <p>In practice by simulation: draw θ from the posterior, simulate the remaining patients, run the final analysis, count successes. Typical rule: stop for futility if PPoS &lt; 5–15%. (Saville et al., 2014; Dmitrienko &amp; Wang, 2006)</p>
+      </details>
+
+      <details>
+        <summary>Why the prior dominates early</summary>
+        <p>Normal outcome, prior mean μ<sub>0</sub> worth n<sub>0</sub> patients, observed mean x̄ from n patients:</p>
+        <div class="formula">posterior mean = (n<sub>0</sub>·μ<sub>0</sub> + n·x̄) / (n<sub>0</sub> + n)</div>
+        <p>With a prior worth 40 patients, an interim look at 20 patients puts two thirds of the weight on the prior; at 400 patients it is under 10%. For a Beta(a<sub>0</sub>, b<sub>0</sub>) prior on a response rate, a<sub>0</sub> + b<sub>0</sub> plays the role of n<sub>0</sub>. This is the <strong>effective sample size</strong> (Morita, Thall &amp; Müller, 2008).</p>
+      </details>
+
+      <details>
+        <summary>Prior families</summary>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Prior</th><th>Idea</th><th>Relevance</th></tr></thead>
+            <tbody>
+              <tr><td>Non-informative / flat</td><td>Very wide, let the data speak</td><td>Comparison arm in SG3</td></tr>
+              <tr><td>Weakly informative</td><td>Rules out absurd values, centre often 0</td><td>What LLMs often default to</td></tr>
+              <tr><td>Informative (historical)</td><td>From earlier trials / meta-analyses</td><td>Gold standard may look like this</td></tr>
+              <tr><td>Expert-elicited</td><td>Structured expert judgement (SHELF)</td><td>Comparison arm in SG3</td></tr>
+              <tr><td>Skeptical / enthusiastic</td><td>Centred on no effect / hoped-for effect</td><td>Sensitivity analyses regulators like</td></tr>
+              <tr><td>Power prior</td><td>Historical likelihood raised to α<sub>0</sub> ∈ [0,1]</td><td>A dial an LLM could justify</td></tr>
+              <tr><td>Robust MAP / mixture</td><td>w·informative + (1−w)·vague</td><td>Natural hedge for an LLM prior; robust to prior–data conflict</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </details>
+
+      <details>
+        <summary>Elicitation today (SHELF) &amp; regulation (FDA 2026)</summary>
+        <p><strong>SHELF</strong>: train experts, elicit private judgements (quantiles, tertiles, roulette), discuss, agree a consensus prior, write a full record (Dallow et al., 2018). Works well (Holzhauer et al., 2022) but needs trained experts and a facilitator per trial; that cost is what the thesis wants to cut. The R package <code>SHELF</code> fits distributions to elicited quantiles.</p>
+        <p><strong>FDA draft guidance</strong> <em>Use of Bayesian Methodology in Clinical Trials of Drug and Biological Products</em> (12 Jan 2026): priors pre-specified with written rationale; discounting and sensitivity analyses for prior–data conflict; operating characteristics by simulation; reproducibility (software, code, seeds). Early futility decisions are named as a use case.</p>
+      </details>
+
+      <details>
+        <summary>LLM priors: opportunities &amp; difficulties</summary>
+        <div class="grid2">
+          <div>
+            <h4>Opportunities</h4>
+            <ul>
+              <li>Minutes instead of a multi-week workshop</li>
+              <li>Broad literature knowledge; converts OR / HR / rates on the fly</li>
+              <li>Writes the rationale regulators ask for</li>
+              <li>Ensembles of models / prompts act like an expert panel</li>
+              <li>Retrieval and tools ground claims in real evidence</li>
+            </ul>
+          </div>
+          <div>
+            <h4>Difficulties</h4>
+            <ul>
+              <li>Calibration: too narrow or uselessly wide</li>
+              <li>Hallucinated or misattributed evidence</li>
+              <li>Memorisation / leakage of trial results</li>
+              <li>Non-determinism vs pre-specification</li>
+              <li>Prompt sensitivity and anchoring</li>
+              <li>Numeracy across effect scales</li>
+              <li>Publication-driven optimism, the wrong direction for futility</li>
+            </ul>
+          </div>
+        </div>
+      </details>
+    </section>
+
+    <!-- RISKS -->
+    <section id="risks">
+      <h2>Risks &amp; mitigations</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Risk</th><th>Impact</th><th>Mitigation</th></tr></thead>
+          <tbody>
+            <tr><td>No suitable published protocol with pre-specified priors</td><td><span class="sev high">High</span></td><td>Fall back to in-house BREATHE trial; collect several candidate protocols early (Nov)</td></tr>
+            <tr><td>Gold-standard trial is in LLM training data (leakage)</td><td><span class="sev high">High</span></td><td>Post-cutoff trials, masked names, test whether answers change when masked</td></tr>
+            <tr><td>Late access to futility model</td><td><span class="sev med">Medium</span></td><td>SG1 and SG2 do not depend on it; build a simple PPoS simulator as stand-in</td></tr>
+            <tr><td>Trial data cannot be sent to external APIs</td><td><span class="sev med">Medium</span></td><td>Only send public trial descriptions; use an open-weight local model for sensitive runs</td></tr>
+            <tr><td>Expert statistician availability</td><td><span class="sev med">Medium</span></td><td>Book in December for a February–March slot; keep the review packet short</td></tr>
+            <tr><td>API cost / model deprecation mid-thesis</td><td><span class="sev low">Low</span></td><td>Agree budget early, cache all responses, record model snapshots</td></tr>
+            <tr><td>January exams eat thesis time</td><td><span class="sev low">Low</span></td><td>Run long experiment grids unattended over the exam period</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Design decisions</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Topic</th><th>Status</th><th>Decision / notes</th></tr></thead>
+          <tbody id="decisions"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- MEETINGS -->
+    <section id="meetings">
+      <h2>Supervision meetings</h2>
+      <div id="meetingList"></div>
+    </section>
+
+    <!-- LOG -->
+    <section id="log">
+      <h2>Progress log</h2>
+      <ol class="log" id="logList"></ol>
+    </section>
+
+    <!-- READING -->
+    <section id="reading">
+      <h2>Reading list</h2>
+      <div class="table-wrap">
+        <table class="reading">
+          <thead><tr><th>Paper</th><th>Why it matters</th></tr></thead>
+          <tbody>
+            <tr><td><a href="https://www.nature.com/articles/s41598-025-18425-9">Riegler et al., 2025 — Scientific Reports</a> · <a href="https://github.com/hugohammer/LLM-priors">code</a></td><td><strong>Starting paper.</strong> LLM Gaussian priors for regression; all signs right, moderate priors too narrow, meta-overconfidence; KL vs MLE as score.</td></tr>
+            <tr><td><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC4247348">Saville et al., 2014 — Clinical Trials</a></td><td>PPoS vs conditional power vs posterior probability.</td></tr>
+            <tr><td><a href="https://www.ncbi.nlm.nih.gov/pubmed/16007570">Dmitrienko &amp; Wang, 2006 — Stat Med</a></td><td>Bayesian predictive monitoring; choosing priors for it.</td></tr>
+            <tr><td><a href="https://doi.org/10.1111/j.1541-0420.2007.00888.x">Morita, Thall &amp; Müller, 2008 — Biometrics</a></td><td>Effective sample size of a prior.</td></tr>
+            <tr><td><a href="https://arxiv.org/html/2601.14701v1">Ji, 2026</a></td><td>Perspective on the FDA draft guidance; borrowing, elicitation.</td></tr>
+            <tr><td><a href="https://www.fda.gov/regulatory-information/search-fda-guidance-documents/use-bayesian-methodology-clinical-trials-drug-and-biological-products">FDA draft guidance, Jan 2026</a> · <a href="https://casrai.org/news/fda-draft-guidance-bayesian-methodology-clinical-trials-2026">CASRAI summary</a></td><td>What regulators expect from a prior.</td></tr>
+            <tr><td><a href="https://arxiv.org/pdf/1708.09823">Dallow et al., 2018</a></td><td>SHELF in drug development.</td></tr>
+            <tr><td><a href="https://tonyohagan.co.uk/academic/abs/NovartisSHELF.html">Holzhauer et al., 2022</a></td><td>SHELF case study (Novartis asthma).</td></tr>
+            <tr><td><a href="https://arxiv.org/abs/2402.07770v2">Selby et al., 2024 — Had enough of experts?</a></td><td>LLM vs human-expert priors.</td></tr>
+            <tr><td><a href="https://proceedings.mlr.press/v267/capstick25a.html">Capstick et al., 2025 — AutoElicit (ICML)</a> · <a href="https://github.com/alexcapstick/llm-elicited-priors">code</a></td><td>Mixture of priors from rephrased prompts; self-consistency baseline.</td></tr>
+            <tr><td><a href="https://arxiv.org/abs/2509.04250">Arai et al., 2025 — How many patients could we save with LLM priors?</a></td><td>Closest to clinical trials; LLM priors beat meta-analytic priors.</td></tr>
+            <tr><td><a href="https://arxiv.org/pdf/2511.01778">Evans et al., 2025 — glioblastoma survival priors</a></td><td>LLM proposes, clinician validates ("reverse elicitation").</td></tr>
+            <tr><td><a href="https://www.alphaxiv.org/abs/2604.16742">CT Open, 2026</a></td><td>Decontaminated trial-outcome benchmark; knowledge-cutoff issues.</td></tr>
+            <tr><td>Spiegelhalter, Abrams &amp; Myles, 2004 — <em>Bayesian Approaches to Clinical Trials and Health-Care Evaluation</em> (Wiley)</td><td>Textbook: priors and monitoring chapters (Arenberg library).</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <p>To update this page, edit <code>data/plan.js</code> (tasks, dates, meetings, log) or <code>index.html</code> (text), then commit and push.</p>
+    </div>
+  </footer>
+</body>
+</html>
