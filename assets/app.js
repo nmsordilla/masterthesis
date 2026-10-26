@@ -120,7 +120,9 @@
   const itemDates = (t) => endOf(t) === t.start ? fmt(t.start) : `${fmt(t.start, { day: "numeric", month: "short" })} → ${fmt(endOf(t))}`;
   const keyTasks = () => P.tasks.filter((t) => t.key && t.due).sort((a, b) => a.due.localeCompare(b.due));
 
-  let filter = store.get("taskFilter") || "all";
+  const FILTERS = ["all", "open", "doing", "overdue", "done"];
+  let filter = store.get("taskFilter");
+  if (!FILTERS.includes(filter)) { filter = "all"; store.del("taskFilter"); }
   const match = (t) => filter === "all" || (filter === "open" && t.status !== "done") || (filter === "overdue" && isOverdue(t)) || t.status === filter;
   let openItems;
   try { openItems = new Set(JSON.parse(store.get("openItems") || "null")); } catch (e) { openItems = null; }
