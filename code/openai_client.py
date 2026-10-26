@@ -2,7 +2,8 @@
 
 Setup:
     pip install -r code/requirements.txt
-    export OPENAI_API_KEY="sk-..."        # never commit your key
+    Put your key in the .env file at the project root (ignored by git):
+        OPENAI_API_KEY=sk-...
 
 Usage from Python:
     from openai_client import ask
@@ -21,6 +22,28 @@ from pathlib import Path
 
 from openai import OpenAI
 
+ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
+
+
+def load_env(path: Path = ENV_FILE) -> None:
+    """Read KEY=value lines from the project's .env file into the environment.
+
+    Variables already set in the shell take precedence over the file.
+    """
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        value = value.strip().strip('"').strip("'")
+        if value:
+            os.environ.setdefault(key.strip(), value)
+
+
+load_env()
+
 DEFAULT_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5-mini")
 LOG_FILE = Path(__file__).parent / "logs" / "openai_calls.jsonl"
 
@@ -32,7 +55,7 @@ def get_client() -> OpenAI:
     global _client
     if _client is None:
         if not os.environ.get("OPENAI_API_KEY"):
-            raise RuntimeError("OPENAI_API_KEY is not set. Run: export OPENAI_API_KEY='sk-...'")
+            raise RuntimeError(f"OPENAI_API_KEY is not set. Paste it into {ENV_FILE} as OPENAI_API_KEY=sk-...")
         _client = OpenAI()
     return _client
 
