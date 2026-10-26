@@ -9,6 +9,8 @@ Usage from Python:
     from openai_client import ask
     print(ask("What is a prior distribution? Answer in one sentence."))
 
+    answer, reasoning = ask_with_reasoning("...")  # also see how it got there
+
 Usage from the terminal:
     python code/openai_client.py "What is a prior distribution?"
 """
@@ -113,19 +115,52 @@ def ask(
     Returns:
         The model's answer as a string.
     """
+    return _call(prompt, system, model, temperature, None, log)[0]
+
+
+def ask_with_reasoning(
+    prompt: str,
+    system: str | None = None,
+    model: str = DEFAULT_MODEL,
+    summary: str = "auto",
+    log: bool = True,
+) -> tuple[str, str]:
+    """Like ask(), but also return a summary of the model's reasoning.
+
+    OpenAI does not expose the raw chain of thought; reasoning models can instead
+    return a summary of it. Only works with reasoning models (gpt-5 family, o3, o4-mini).
+
+    Args:
+        summary: "auto", "concise" or "detailed".
+
+    Returns:
+        (answer, reasoning_summary). The summary is "" if the model returned none.
+    """
+    return _call(prompt, system, model, None, summary, log)
+
+
+def _call(prompt, system, model, temperature, summary, log) -> tuple[str, str]:
     params = {"model": model, "input": prompt}
     if system:
         params["instructions"] = system
     if temperature is not None:
         params["temperature"] = temperature
+    if summary:
+        params["reasoning"] = {"summary": summary}
 
     start = time.perf_counter()
     response = get_client().responses.create(**params)
     answer = response.output_text
+    reasoning = "\n\n".join(
+        part.text
+        for item in response.output
+        if getattr(item, "type", None) == "reasoning"
+        for part in (getattr(item, "summary", None) or [])
+    )
 
     if log:
-        _log_call(params, response, answer, time.perf_counter() - start)
-    return answer
+        _log_call(params, response, answer, reasoning, time.perf_counter() - start)
+    return answer, reasoning
 
 
 def price_for(model: str) -> tuple[float, float, float] | None:
@@ -155,7 +190,7 @@ def total_cost(log_file: Path | None = None) -> float:
     return total
 
 
-def _log_call(params: dict, response, answer: str, seconds: float) -> None:
+def _log_call(params: dict, response, answer: str, reasoning: str, seconds: float) -> None:
     """Write one JSON line per call so every prior can be traced back to its prompt."""
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     usage = getattr(response, "usage", None)
@@ -176,6 +211,7 @@ def _log_call(params: dict, response, answer: str, seconds: float) -> None:
         "system": params.get("instructions"),
         "prompt": params["input"],
         "answer": answer,
+        "reasoning_summary": reasoning or None,
         "input_tokens": input_tokens,
         "cached_input_tokens": cached_tokens,
         "output_tokens": output_tokens,

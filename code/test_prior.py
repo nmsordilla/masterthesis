@@ -6,7 +6,7 @@ Edit SYSTEM and PROMPT below, then run from the project root:
 Every call is logged (prompt, answer, tokens, cost) to code/logs/openai_calls.jsonl.
 """
 
-from openai_client import ask, total_cost
+from openai_client import ask_with_reasoning, total_cost
 
 # How the model should behave: its role and the format of its answer.
 SYSTEM = """You are an expert oncologist helping to elicit a prior distribution for a clinical trial outcome.
@@ -22,6 +22,9 @@ Evidence:
 """
 
 if __name__ == "__main__":
-    answer = ask(PROMPT, system=SYSTEM)
+    answer, reasoning = ask_with_reasoning(PROMPT, system=SYSTEM)
+    print("=== Reasoning (summary) ===")
+    print(reasoning or "(no reasoning summary returned)")
+    print("\n=== Answer ===")
     print(answer)
     print(f"\n[total spent so far: ${total_cost():.4f}]")
