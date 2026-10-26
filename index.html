@@ -74,6 +74,21 @@
     <section id="timeline">
       <h2>Timeline</h2>
       <p class="muted">October 2026 → June 2027. The dashed line is today. Dates marked <span class="pill tbc">TBC</span> still need confirming with the faculty or supervisors.</p>
+      <div id="banner"></div>
+      <div class="toolbar" id="toolbar" hidden>
+        <label class="switch"><input type="checkbox" id="editToggle"><span class="slider" aria-hidden="true"></span>Edit mode</label>
+        <div class="edit-actions">
+          <button type="button" id="addPhase">+ Phase</button>
+          <button type="button" id="addMilestone">+ Event</button>
+          <button type="button" id="undoBtn" title="Undo (Ctrl+Z)">↶ Undo</button>
+          <span class="spacer"></span>
+          <span id="dirtyNote" class="dirty-note"></span>
+          <button type="button" id="discardBtn">Discard</button>
+          <button type="button" id="saveAsBtn" title="Choose where to save plan.js">Save as…</button>
+          <button type="button" id="saveBtn" class="primary">Save plan.js</button>
+        </div>
+      </div>
+      <p class="edit-hint">Drag a bar to move it · drag its ends to change start / end · click a bar or name to edit its tasks · drag ◆ to move an event, click it to edit · ▲▼ swap order.</p>
       <div class="gantt-scroll">
         <div class="gantt" id="gantt" role="img" aria-label="Gantt chart of thesis phases"></div>
       </div>
@@ -357,9 +372,13 @@
     </section>
   </main>
 
+  <dialog id="editDialog"></dialog>
+  <div id="dragTip" class="drag-tip" hidden></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
   <footer class="site-footer">
     <div class="wrap">
-      <p>To update this page, edit <code>data/plan.js</code> (tasks, dates, meetings, log) or <code>index.html</code> (text), then commit and push.</p>
+      <p>To update this page, use <strong>Edit mode</strong> on the timeline (local copy only) or edit <code>data/plan.js</code> (tasks, dates, meetings, log) and <code>index.html</code> (text), then commit and push.</p>
     </div>
   </footer>
 </body>
