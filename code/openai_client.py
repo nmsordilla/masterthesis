@@ -143,8 +143,9 @@ def call_cost(model: str, input_tokens: int, cached_tokens: int, output_tokens: 
     return ((input_tokens - cached_tokens) * p_in + cached_tokens * p_cached + output_tokens * p_out) / 1_000_000
 
 
-def total_cost(log_file: Path = LOG_FILE) -> float:
+def total_cost(log_file: Path | None = None) -> float:
     """Sum of cost_usd over every call in the log."""
+    log_file = log_file or LOG_FILE
     if not log_file.exists():
         return 0.0
     total = 0.0
