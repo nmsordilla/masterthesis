@@ -10,6 +10,7 @@
   const parse = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
   const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const addDays = (s, n) => { const d = parse(s); d.setDate(d.getDate() + n); return iso(d); };
+  const mondayOf = (d) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
   const today = (() => { const t = new Date(); return new Date(t.getFullYear(), t.getMonth(), t.getDate()); })();
   const TODAY = iso(today);
   const daysUntil = (s) => Math.round((parse(s) - today) / DAY);
@@ -28,6 +29,7 @@
   const CAT_LABEL = { setup: "Setup / background", sg1: "Sub-goal 1 · accuracy", sg2: "Sub-goal 2 · documentation", sg3: "Sub-goal 3 · futility", writing: "Writing", deadline: "Presentation / deadline", meeting: "Meeting", break: "Break (exams, holidays)" };
   const STATUSES = ["todo", "doing", "done", "blocked"];
   const STATUS_LABEL = { todo: "To do", doing: "In progress", done: "Done", blocked: "Blocked" };
+  const FLAG_LABEL = { "": "—", key: "★ Key date", countdown: "★ + countdown" };
 
   // ---------- plan.js serialisation ----------
   const HEADER = `/*
@@ -36,15 +38,16 @@
  * Edit it by hand, or use "Edit mode" on the timeline of the local site and
  * press "Save plan.js" (that rewrites this whole file).
  *
- * Everything dynamic on the site (countdowns, timeline, task progress,
- * meetings, decisions, progress log) is rendered from this object.
+ * Everything dynamic on the site (countdowns, timeline, tasks, meetings,
+ * decisions, progress log) is rendered from this object.
  * Dates are ISO strings (YYYY-MM-DD). Task status: "todo" | "doing" | "done" | "blocked".
  *
- * timeline: one list of items. An item with \`start\` and \`end\` is a bar;
- * an item with only \`start\` is a single date (◆).
- * category: "setup" | "sg1" | "sg2" | "sg3" | "writing" | "deadline" | "meeting" | "break"
- * tbc: true → date still to be confirmed      key: true → countdown at the top
- * Tasks belong to a timeline item through its \`id\` (task.item).
+ * timeline: blocks (bars) with a start and end date.
+ *   category: "setup" | "sg1" | "sg2" | "sg3" | "writing" | "deadline" | "meeting" | "break"
+ * tasks: belong to a block through its \`id\` (task.item).
+ *   key: true → ★ key date (tick on the bar, listed under Key dates)
+ *   countdown: true → countdown at the top      tbc: true → date not confirmed
+ * meta.weekOne: Monday of thesis week 1 (week numbers on the timeline).
  *
  * Kept as a .js file (not .json) so the site also works when opened
  * directly from disk (file://), where browsers block fetch().
@@ -83,7 +86,7 @@
       if (planHash(d.plan) === fileBase) store.del(DRAFT_KEY);           // plan.js already contains the draft
       else if (d.base === fileBase) { P = d.plan; if (d.downloaded) savedHash = planHash(P); }
       else staleDraft = d;                                               // plan.js changed since the draft was made
-    }
+    } else if (d) store.del(DRAFT_KEY);
   } catch (e) { store.del(DRAFT_KEY); }
 
   const isDirty = () => planHash(P) !== savedHash;
@@ -105,6 +108,31 @@
     render();
     toast("Undone");
   }
+
+  // ---------- Plan helpers ----------
+  const tasksOf = (id) => P.tasks.filter((t) => t.item === id);
+  const endOf = (t) => t.end || t.start;
+  const byDate = (list) => [...list].sort((a, b) => a.start.localeCompare(b.start) || endOf(a).localeCompare(endOf(b)));
+  const colorOf = (cat) => `var(${CAT_COLOR[cat] || "--accent"})`;
+  const weekOne = () => mondayOf(parse((P.meta && P.meta.weekOne) || P.timeline.map((t) => t.start).sort()[0] || TODAY));
+  const weekNo = (s) => Math.floor(Math.round((mondayOf(parse(s)) - weekOne()) / DAY) / 7) + 1;
+  const weekRange = (t) => { const a = weekNo(t.start), b = weekNo(endOf(t)); return a === b ? `week ${a}` : `weeks ${a}–${b}`; };
+  const itemDates = (t) => endOf(t) === t.start ? fmt(t.start) : `${fmt(t.start, { day: "numeric", month: "short" })} → ${fmt(endOf(t))}`;
+  const keyTasks = () => P.tasks.filter((t) => t.key && t.due).sort((a, b) => a.due.localeCompare(b.due));
+
+  let filter = store.get("taskFilter") || "all";
+  const match = (t) => filter === "all" || (filter === "open" && t.status !== "done") || (filter === "overdue" && isOverdue(t)) || t.status === filter;
+  let openItems;
+  try { openItems = new Set(JSON.parse(store.get("openItems") || "null")); } catch (e) { openItems = null; }
+  if (!store.get("openItems")) {
+    // first visit: open the block(s) running today, or else the next one coming up
+    const withTasks = P.timeline.filter((t) => tasksOf(t.id).length);
+    const now = withTasks.filter((t) => t.start <= TODAY && TODAY <= endOf(t));
+    const next = byDate(withTasks.filter((t) => t.start > TODAY))[0];
+    openItems = new Set((now.length ? now : next ? [next] : []).map((t) => t.id));
+  }
+  const saveOpen = () => store.set("openItems", JSON.stringify([...openItems]));
+  function toggleItem(id) { openItems.has(id) ? openItems.delete(id) : openItems.add(id); saveOpen(); renderGantt(); }
 
   // ---------- Theme ----------
   const root = document.documentElement;
@@ -133,107 +161,115 @@
     if (P.meta.repo) people.push(["Code", `<a href="${esc(P.meta.repo)}">${esc(P.meta.repo.replace(/^https?:\/\//, ""))}</a>`]);
     $("#people").innerHTML = people.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("");
 
-    const next = byDate(P.timeline.filter((t) => !isRange(t) && t.category !== "break" && daysUntil(t.start) >= 0))[0];
-    const counters = [];
-    if (next && !next.key) counters.push(Object.assign({}, next, { label: "Next up" }));
-    byDate(P.timeline.filter((t) => t.key)).forEach((t) => counters.push(Object.assign({}, t, { label: t.name })));
-    $("#countdowns").innerHTML = counters.map((m) => {
-      const n = daysUntil(m.start);
-      return `<div class="count${m.key ? " highlight" : ""}">
-        <div class="lbl">${esc(m.label)}${tbc(m)}</div>
+    const keys = keyTasks();
+    const next = keys.find((t) => t.status !== "done" && daysUntil(t.due) >= 0);
+    const cards = [];
+    if (next && !next.countdown) cards.push({ label: "Next key date", date: next.due, sub: next.task, tbc: next.tbc });
+    keys.filter((t) => t.countdown).forEach((t) => cards.push({ label: t.task, date: t.due, tbc: t.tbc, highlight: true }));
+    $("#countdowns").innerHTML = cards.map((c) => {
+      const n = daysUntil(c.date);
+      return `<div class="count${c.highlight ? " highlight" : ""}">
+        <div class="lbl">${esc(c.label)}${tbc(c)}</div>
         <div class="n">${n >= 0 ? n : "✓"}</div>
-        <div class="d">${n >= 0 ? `days · ~${Math.floor(n / 7)} weeks` : "done"} · ${fmt(m.start)}</div>
-        ${m.label === "Next up" ? `<div class="d">${esc(m.name)}</div>` : ""}
+        <div class="d">${n >= 0 ? `days · ~${Math.floor(n / 7)} weeks` : "done"} · ${fmt(c.date)} · week ${weekNo(c.date)}</div>
+        ${c.sub ? `<div class="d">${esc(c.sub)}</div>` : ""}
       </div>`;
     }).join("");
   }
 
-  // ---------- Render: Gantt ----------
-  const G = { start: null, span: 1 };
-  const pct = (d) => (((typeof d === "string" ? parse(d) : d) - G.start) / G.span) * 100;
-  const tasksOf = (id) => P.tasks.filter((t) => t.item === id);
-  const isRange = (t) => !!t.end && t.end > t.start;
-  const byDate = (list) => [...list].sort((a, b) => a.start.localeCompare(b.start) || (a.end || a.start).localeCompare(b.end || b.start));
-  const itemDates = (t, long) => isRange(t)
-    ? `${fmt(t.start, { day: "numeric", month: "short" })} → ${fmt(t.end)}`
-    : fmt(t.start, long ? { weekday: "short", day: "numeric", month: "short", year: "numeric" } : undefined);
-  const phaseProgress = (id) => { const ts = tasksOf(id); return ts.length ? ts.filter((t) => t.status === "done").length / ts.length : 0; };
-  const colorOf = (cat) => `var(${CAT_COLOR[cat] || "--accent"})`;
-
-  function renderGantt() {
-    const allDates = [...P.timeline.flatMap((t) => [t.start, t.end].filter(Boolean)), TODAY].map(parse);
-    const min = new Date(Math.min(...allDates)); const max = new Date(Math.max(...allDates));
-    G.start = new Date(min.getFullYear(), min.getMonth(), 1);
-    const gEnd = new Date(max.getFullYear(), max.getMonth() + 1, 1);
-    G.span = gEnd - G.start;
-
-    const months = [];
-    for (let d = new Date(G.start); d < gEnd; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) months.push(new Date(d));
-    const widths = months.map((d) => ((new Date(d.getFullYear(), d.getMonth() + 1, 1) - d) / G.span) * 100);
-
-    let g = `<div class="g-months" style="grid-template-columns:${widths.map((w) => w + "%").join(" ")}">` +
-      months.map((d, i) => `<div class="g-month">${d.toLocaleDateString("en-GB", { month: "short" })}${d.getMonth() === 0 || i === 0 ? " " + d.getFullYear() : ""}</div>`).join("") + "</div>";
-    g += `<div style="position:relative"><div class="g-overlay">` +
-      months.map((d) => `<div class="g-grid" style="left:${pct(d)}%"></div>`).join("") +
-      P.timeline.filter((t) => t.category === "break" && isRange(t)).map((t) => `<div class="g-break" style="left:${pct(t.start)}%;width:${pct(addDays(t.end, 1)) - pct(t.start)}%"></div>`).join("") +
-      `<div class="g-today" style="left:${pct(today)}%"><span>Today</span></div></div>`;
-
-    P.timeline.forEach((t, i) => {
-      const c = colorOf(t.category);
-      const tip = `${esc(t.name)} · ${itemDates(t)}${t.tbc ? " (TBC)" : ""}`;
-      let mark;
-      if (isRange(t)) {
-        const prog = Math.round(phaseProgress(t.id) * 100);
-        mark = `<div class="g-bar${t.category === "break" ? " break" : ""}" data-id="${esc(t.id)}"
-          style="--c:${c};left:${pct(t.start)}%;width:${Math.max(pct(addDays(t.end, 1)) - pct(t.start), 0.6)}%"
-          title="${tip}${tasksOf(t.id).length ? ` · ${prog}% done` : ""}">
-          <span class="rz l"></span><div class="fill" style="width:${prog}%"></div><span class="rz r"></span></div>`;
-      } else {
-        mark = `<div class="g-diamond${t.key ? " key" : ""}" data-id="${esc(t.id)}" style="--c:${c};left:${pct(t.start)}%" title="${tip}"></div>`;
-      }
-      g += `<div class="g-row${isRange(t) ? "" : " single"}"><div class="g-label" title="${esc(t.name)}">
-          <span class="g-move"><button type="button" data-act="up" data-id="${esc(t.id)}" ${i === 0 ? "disabled" : ""} aria-label="Move up">▲</button><button type="button" data-act="down" data-id="${esc(t.id)}" ${i === P.timeline.length - 1 ? "disabled" : ""} aria-label="Move down">▼</button></span>
-          <span class="lname" data-id="${esc(t.id)}">${isRange(t) ? "" : '<span class="dot" style="--c:' + c + '">◆</span> '}${esc(t.name)}</span></div>
-        <div class="g-track">${mark}</div></div>`;
-    });
-    g += `</div>`;
-    $("#gantt").innerHTML = g;
-
-    $("#milestones").innerHTML = byDate(P.timeline.filter((t) => !isRange(t) || t.category === "break")).map((t) =>
-      `<li data-id="${esc(t.id)}" class="${t.category === "break" ? "kind-break" : ""}${daysUntil(t.end || t.start) < 0 ? " past" : ""}${t.key ? " highlight" : ""}">
-        <span class="date">${itemDates(t, true)}</span><span class="t">${esc(t.name)}${tbc(t)}</span><span class="rel">${rel(daysUntil(t.start))}</span></li>`).join("");
-  }
-
-  // ---------- Render: work plan ----------
-  let filter = store.get("taskFilter") || "all";
-  const openPhases = new Set(P.timeline.filter((t) => isRange(t) && parse(t.start) <= today && today <= parse(t.end)).map((t) => t.id));
-  const match = (t) => filter === "all" || (filter === "open" && t.status !== "done") || (filter === "overdue" && isOverdue(t)) || t.status === filter;
-
-  function renderWork() {
+  // ---------- Render: progress + filters ----------
+  function renderOverall() {
     const done = P.tasks.filter((t) => t.status === "done").length;
     const overdue = P.tasks.filter(isOverdue).length;
-    const total = P.tasks.length || 1;
     $("#overall").innerHTML = `<strong>${done} / ${P.tasks.length} tasks done</strong>
-      <div class="progress" aria-hidden="true"><div style="width:${(done / total) * 100}%"></div></div>
-      <span class="muted">${P.tasks.filter((t) => t.status === "doing").length} in progress${overdue ? ` · <span style="color:var(--blocked)">${overdue} overdue</span>` : ""}</span>`;
+      <div class="progress" aria-hidden="true"><div style="width:${(done / (P.tasks.length || 1)) * 100}%"></div></div>
+      <span class="muted">${P.tasks.filter((t) => t.status === "doing").length} in progress${overdue ? ` · <span style="color:var(--blocked)">${overdue} overdue</span>` : ""} · now in week ${weekNo(TODAY)}</span>`;
+    $$(".filters button[data-filter]").forEach((x) => x.classList.toggle("active", x.dataset.filter === filter));
+  }
 
-    const items = P.timeline.filter((t) => t.category !== "break" && (isRange(t) || tasksOf(t.id).length));
-    $("#phases").innerHTML = items.map((p) => {
-      const ts = tasksOf(p.id); const shown = ts.filter(match);
-      const prog = Math.round(phaseProgress(p.id) * 100);
-      const active = parse(p.start) <= today && today <= parse(p.end || p.start);
-      return `<details class="phase" data-id="${esc(p.id)}" style="--c:${colorOf(p.category)}" ${openPhases.has(p.id) || filter !== "all" ? "open" : ""}>
-        <summary><span class="pname">${esc(p.name)}${active ? ' <span class="pill" style="background:var(--accent-soft);color:var(--accent)">NOW</span>' : ""}<button type="button" class="phase-edit" data-id="${esc(p.id)}">Edit</button></span>
-          <span class="pdates">${itemDates(p)}</span>
-          <span class="pprog"><span class="progress"><div style="width:${prog}%"></div></span>${ts.filter((t) => t.status === "done").length}/${ts.length}</span></summary>
-        ${shown.length ? `<ul class="tasks">${shown.map((t) => `<li class="${esc(t.status)}${isOverdue(t) ? " overdue" : ""}" data-ti="${P.tasks.indexOf(t)}">
-          <span class="status ${esc(t.status)}" title="${STATUS_LABEL[t.status] || t.status}${editMode ? " — click to change" : ""}"></span><span class="txt">${esc(t.task)}</span>
-          <span class="due">${t.due ? fmt(t.due, { day: "numeric", month: "short" }) : ""}</span></li>`).join("")}</ul>`
-          : `<div class="empty">${ts.length ? "No tasks match this filter." : "No tasks yet."}</div>`}
-      </details>`;
+  // ---------- Render: Gantt ----------
+  const G = { start: null, end: null, span: 1 };
+  const pct = (d) => (((typeof d === "string" ? parse(d) : d) - G.start) / G.span) * 100;
+
+  function taskList(t, ts) {
+    const shown = ts.filter(match);
+    return `<div class="g-detail"><div class="g-dinner">
+      <div class="d-head"><span>${itemDates(t)} · ${weekRange(t)}${tbc(t)}</span><span class="spacer"></span>
+        <button type="button" class="d-edit" data-act="edit">✎ Edit block &amp; tasks</button></div>
+      ${shown.length ? `<ul class="tasks">${shown.map((x) => `<li class="${esc(x.status)}${isOverdue(x) ? " overdue" : ""}${x.key ? " key" : ""}" data-ti="${P.tasks.indexOf(x)}">
+          <span class="status ${esc(x.status)}" title="${STATUS_LABEL[x.status] || esc(x.status)}${editMode ? " — click to change" : ""}"></span>
+          <span class="txt">${x.key ? '<span class="star" title="Key date">★</span> ' : ""}${esc(x.task)}${tbc(x)}</span>
+          <span class="due">${x.due ? `${fmt(x.due, { weekday: "short", day: "numeric", month: "short" })} · wk ${weekNo(x.due)}` : ""}</span></li>`).join("")}</ul>`
+        : `<div class="empty">${ts.length ? "No tasks match this filter." : "No tasks yet."}</div>`}
+    </div></div>`;
+  }
+
+  function renderGantt() {
+    const dates = [...P.timeline.flatMap((t) => [t.start, endOf(t)]), ...P.tasks.map((t) => t.due).filter(Boolean), TODAY].map(parse);
+    G.start = mondayOf(new Date(Math.min(...dates)));
+    G.end = mondayOf(new Date(Math.max(...dates))); G.end.setDate(G.end.getDate() + 7);
+    G.span = G.end - G.start;
+
+    // Month + week axis, grid lines
+    let months = "", weeks = "", lines = "";
+    for (let m = new Date(G.start.getFullYear(), G.start.getMonth(), 1); m < G.end; m = new Date(m.getFullYear(), m.getMonth() + 1, 1)) {
+      const a = Math.max(0, pct(m)), b = Math.min(100, pct(new Date(m.getFullYear(), m.getMonth() + 1, 1)));
+      months += `<div class="g-mseg" style="left:${a}%;width:${b - a}%">${b - a > 3 ? m.toLocaleDateString("en-GB", { month: "short" }) + (m.getMonth() === 0 || a === 0 ? " " + m.getFullYear() : "") : ""}</div>`;
+      if (pct(m) > 0) lines += `<div class="g-mline" style="left:${pct(m)}%"></div>`;
+    }
+    const curMon = +mondayOf(today);
+    for (let d = new Date(G.start); d < G.end; d.setDate(d.getDate() + 7)) {
+      const s = iso(d), n = weekNo(s), a = pct(d), w = pct(addDays(s, 7)) - a, cur = +d === curMon;
+      weeks += `<div class="g-wk${cur ? " cur" : ""}${n < 1 ? " pre" : ""}" style="left:${a}%;width:${w}%" title="Week ${n}: ${fmt(s, { day: "numeric", month: "short" })} – ${fmt(addDays(s, 6))}">${n}</div>`;
+      lines += `<div class="g-wline" style="left:${a}%"></div>`;
+      if (cur) lines += `<div class="g-curwk" style="left:${a}%;width:${w}%"></div>`;
+    }
+    lines += P.timeline.filter((t) => t.category === "break").map((t) => `<div class="g-break" style="left:${pct(t.start)}%;width:${pct(addDays(endOf(t), 1)) - pct(t.start)}%"></div>`).join("");
+    lines += `<div class="g-today" style="left:${pct(today) + (pct(addDays(TODAY, 1)) - pct(today)) / 2}%" title="Today"></div>`;
+
+    const rows = P.timeline.map((t, i) => {
+      const ts = tasksOf(t.id);
+      const done = ts.filter((x) => x.status === "done").length;
+      const open = openItems.has(t.id) && ts.length > 0;
+      const left = pct(t.start), width = Math.max(pct(addDays(endOf(t), 1)) - left, 0.4);
+      const prog = ts.length ? Math.round((done / ts.length) * 100) : 0;
+      const ticks = ts.filter((x) => x.key && x.due).map((x) => {
+        const mid = pct(x.due) + (pct(addDays(x.due, 1)) - pct(x.due)) / 2;
+        return `<span class="g-tick" style="left:${Math.min(100, Math.max(0, ((mid - left) / width) * 100))}%" title="★ ${esc(x.task)} · ${fmt(x.due)}"></span>`;
+      }).join("");
+      const active = t.start <= TODAY && TODAY <= endOf(t);
+      const dim = filter !== "all" && ts.length && !ts.some(match);
+      return `<div class="g-item${open ? " open" : ""}${active ? " active" : ""}${dim ? " dim" : ""}" data-id="${esc(t.id)}" style="--c:${colorOf(t.category)}">
+        <div class="g-row">
+          <div class="g-label">
+            ${ts.length ? `<button type="button" class="g-toggle" aria-expanded="${open}" aria-label="${open ? "Hide" : "Show"} tasks">▸</button>` : '<span class="g-toggle-sp"></span>'}
+            <span class="lname" title="${esc(t.name)} · ${weekRange(t)}">${esc(t.name)}</span>
+            ${ts.length ? `<span class="g-count${done === ts.length ? " all" : ""}" title="${done} of ${ts.length} tasks done">${done}/${ts.length}</span>` : ""}
+            <span class="g-tools"><button type="button" data-act="up" ${i === 0 ? "disabled" : ""} aria-label="Move up">▲</button><button type="button" data-act="down" ${i === P.timeline.length - 1 ? "disabled" : ""} aria-label="Move down">▼</button><button type="button" data-act="edit" aria-label="Edit">✎</button></span>
+          </div>
+          <div class="g-track"><div class="g-bar${t.category === "break" ? " break" : ""}" style="left:${left}%;width:${width}%"
+            title="${esc(t.name)} · ${itemDates(t)} · ${weekRange(t)}${ts.length ? ` · ${prog}% done` : ""}">
+            <span class="rz l"></span><div class="fill" style="width:${prog}%"></div>${ticks}<span class="rz r"></span></div></div>
+        </div>
+        ${open ? taskList(t, ts) : ""}
+      </div>`;
     }).join("");
-    $$("#phases details").forEach((d) => d.addEventListener("toggle", () => { d.open ? openPhases.add(d.dataset.id) : openPhases.delete(d.dataset.id); }));
-    $$(".filters button").forEach((x) => x.classList.toggle("active", x.dataset.filter === filter));
+
+    $("#gantt").innerHTML = `
+      <div class="g-head">
+        <div class="g-row g-hrow"><div class="g-label"></div><div class="g-track">${months}</div></div>
+        <div class="g-row g-hrow g-weeks"><div class="g-label">Week</div><div class="g-track">${weeks}</div></div>
+      </div>
+      <div class="g-body"><div class="g-overlay">${lines}</div>${rows}</div>`;
+
+    // Key dates & breaks
+    const entries = [
+      ...keyTasks().map((t) => ({ date: t.due, label: t.task, tbc: t.tbc, item: t.item, highlight: t.countdown, done: t.status === "done" })),
+      ...P.timeline.filter((t) => t.category === "break").map((t) => ({ date: t.start, end: endOf(t), label: t.name, tbc: t.tbc, item: t.id, brk: true }))
+    ].sort((a, b) => a.date.localeCompare(b.date));
+    $("#milestones").innerHTML = entries.map((e) => `<li data-item="${esc(e.item)}" class="${e.brk ? "kind-break" : ""}${daysUntil(e.end || e.date) < 0 || e.done ? " past" : ""}${e.highlight ? " highlight" : ""}">
+      <span class="date">${e.end ? `${fmt(e.date, { day: "numeric", month: "short" })} – ${fmt(e.end)}` : fmt(e.date, { weekday: "short", day: "numeric", month: "short", year: "numeric" })}</span>
+      <span class="t">${e.brk ? "" : "★ "}${esc(e.label)}${tbc(e)}</span><span class="rel">wk ${weekNo(e.date)} · ${rel(daysUntil(e.date))}</span></li>`).join("");
   }
 
   // ---------- Render: decisions, meetings, log ----------
@@ -283,13 +319,11 @@
   }
 
   function render() {
-    renderHero(); renderGantt(); renderWork(); renderRest(); renderToolbar();
+    renderHero(); renderOverall(); renderGantt(); renderRest(); renderToolbar();
   }
 
-  // ---------- Edit mode ----------
-  function setEdit(on) {
-    editMode = on; store.set("editMode", on ? "1" : "0"); render();
-  }
+  // ---------- Controls ----------
+  function setEdit(on) { editMode = on; store.set("editMode", on ? "1" : "0"); render(); }
   $("#editToggle").addEventListener("change", (e) => setEdit(e.target.checked));
   $("#undoBtn").addEventListener("click", undo);
   $("#addItem").addEventListener("click", () => openItemDialog(null));
@@ -307,37 +341,53 @@
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); save(false); }
   });
 
-  // Filters
-  $$(".filters button").forEach((b) => b.addEventListener("click", () => {
-    filter = b.dataset.filter; store.set("taskFilter", filter); renderWork();
+  $$(".filters button[data-filter]").forEach((b) => b.addEventListener("click", () => {
+    filter = b.dataset.filter; store.set("taskFilter", filter);
+    if (filter !== "all") { openItems = new Set(P.timeline.filter((t) => tasksOf(t.id).some(match)).map((t) => t.id)); saveOpen(); }
+    renderOverall(); renderGantt();
   }));
+  $("#expandAll").addEventListener("click", () => { openItems = new Set(P.timeline.map((t) => t.id)); saveOpen(); renderGantt(); });
+  $("#collapseAll").addEventListener("click", () => { openItems = new Set(); saveOpen(); renderGantt(); });
 
-  // Gantt: reorder + open dialogs
+  // Gantt clicks: expand/collapse, reorder, edit, task status
   $("#gantt").addEventListener("click", (e) => {
-    if (!editMode) return;
-    const mv = e.target.closest(".g-move button");
-    if (mv) {
-      const i = P.timeline.findIndex((t) => t.id === mv.dataset.id);
-      const j = mv.dataset.act === "up" ? i - 1 : i + 1;
+    const el = e.target.closest(".g-item");
+    if (!el) return;
+    const id = el.dataset.id;
+    const act = e.target.closest("[data-act]");
+    if (act) {
+      if (!editMode) return;
+      if (act.dataset.act === "edit") return openItemDialog(id);
+      const i = P.timeline.findIndex((t) => t.id === id);
+      const j = act.dataset.act === "up" ? i - 1 : i + 1;
       if (j < 0 || j >= P.timeline.length) return;
       change(() => { [P.timeline[i], P.timeline[j]] = [P.timeline[j], P.timeline[i]]; });
       return;
     }
-    const nm = e.target.closest(".lname");
-    if (nm) openItemDialog(nm.dataset.id);
+    const li = e.target.closest(".tasks li");
+    if (li) {
+      if (!editMode) return;
+      const ti = +li.dataset.ti;
+      if (e.target.classList.contains("status")) change(() => { const t = P.tasks[ti]; t.status = STATUSES[(STATUSES.indexOf(t.status) + 1) % STATUSES.length]; });
+      else if (e.target.closest(".txt")) openItemDialog(id);
+      return;
+    }
+    if (e.target.closest(".g-detail")) return;
+    if (editMode && e.target.closest(".g-bar")) return;   // handled by drag
+    if (e.target.closest(".g-label, .g-track") && tasksOf(id).length) toggleItem(id);
   });
 
-  // Gantt: drag to move / resize
+  // Gantt: drag to move / resize (edit mode)
   const tip = $("#dragTip");
   $("#gantt").addEventListener("pointerdown", (e) => {
     if (!editMode || e.button !== 0) return;
-    const el = e.target.closest(".g-bar, .g-diamond");
+    const el = e.target.closest(".g-bar");
     if (!el) return;
     e.preventDefault();
-    const isMs = el.classList.contains("g-diamond");
-    const item = P.timeline.find((t) => t.id === el.dataset.id);
+    const id = el.closest(".g-item").dataset.id;
+    const item = P.timeline.find((t) => t.id === id);
     const mode = e.target.classList.contains("rz") ? (e.target.classList.contains("l") ? "start" : "end") : "move";
-    const o = { start: item.start, end: item.end };
+    const o = { start: item.start, end: endOf(item) };
     const pxPerDay = el.parentElement.getBoundingClientRect().width / (G.span / DAY);
     const x0 = e.clientX; let moved = false; let ns = o.start; let ne = o.end;
     try { el.setPointerCapture(e.pointerId); } catch (err) {}
@@ -347,77 +397,77 @@
       if (Math.abs(ev.clientX - x0) > 3) moved = true;
       if (!moved) return;
       const dd = Math.round((ev.clientX - x0) / pxPerDay);
-      if (mode === "move") { ns = addDays(o.start, dd); ne = o.end ? addDays(o.end, dd) : o.end; }
+      if (mode === "move") { ns = addDays(o.start, dd); ne = addDays(o.end, dd); }
       else if (mode === "start") { ns = addDays(o.start, dd); if (ns > o.end) ns = o.end; }
       else { ne = addDays(o.end, dd); if (ne < o.start) ne = o.start; }
       el.style.left = pct(ns) + "%";
-      if (!isMs) el.style.width = Math.max(pct(addDays(ne, 1)) - pct(ns), 0.6) + "%";
+      el.style.width = Math.max(pct(addDays(ne, 1)) - pct(ns), 0.4) + "%";
       tip.hidden = false; tip.style.left = ev.clientX + "px"; tip.style.top = el.getBoundingClientRect().top + "px";
-      tip.textContent = isMs ? fmt(ns, { weekday: "short", day: "numeric", month: "short", year: "numeric" })
-        : `${fmt(ns, { day: "numeric", month: "short" })} → ${fmt(ne, { day: "numeric", month: "short", year: "numeric" })} · ${Math.round((parse(ne) - parse(ns)) / DAY) + 1} days`;
+      const wk = weekNo(ns) === weekNo(ne) ? `wk ${weekNo(ns)}` : `wk ${weekNo(ns)}–${weekNo(ne)}`;
+      tip.textContent = `${fmt(ns, { day: "numeric", month: "short" })} → ${fmt(ne, { day: "numeric", month: "short", year: "numeric" })} · ${wk} · ${Math.round((parse(ne) - parse(ns)) / DAY) + 1} days`;
     };
     const onUp = () => {
       el.removeEventListener("pointermove", onMove); el.removeEventListener("pointerup", onUp); el.removeEventListener("pointercancel", onUp);
       el.classList.remove("dragging"); tip.hidden = true;
-      if (!moved) { openItemDialog(item.id); return; }
+      if (!moved) { openItemDialog(id); return; }
       if (ns === o.start && ne === o.end) { render(); return; }
       change(() => {
-        const target = P.timeline.find((t) => t.id === item.id);
-        target.start = ns; if (target.end) target.end = ne;
+        const t = P.timeline.find((x) => x.id === id);
+        t.start = ns;
+        if (ne > ns) t.end = ne; else delete t.end;
       });
     };
     el.addEventListener("pointermove", onMove); el.addEventListener("pointerup", onUp); el.addEventListener("pointercancel", onUp);
   });
 
-  // Key dates list → edit event
+  // Key dates list → open its block
   $("#milestones").addEventListener("click", (e) => {
     const li = e.target.closest("li");
-    if (editMode && li) openItemDialog(li.dataset.id);
-  });
-
-  // Work plan: cycle status, open phase dialog
-  $("#phases").addEventListener("click", (e) => {
-    if (!editMode) return;
-    const btn = e.target.closest(".phase-edit");
-    if (btn) { e.preventDefault(); e.stopPropagation(); openItemDialog(btn.dataset.id); return; }
-    const li = e.target.closest(".tasks li");
     if (!li) return;
-    const ti = +li.dataset.ti;
-    if (e.target.classList.contains("status")) {
-      change(() => { const t = P.tasks[ti]; t.status = STATUSES[(STATUSES.indexOf(t.status) + 1) % STATUSES.length]; });
-    } else if (e.target.classList.contains("txt")) openItemDialog(P.tasks[ti].item);
+    if (editMode) return openItemDialog(li.dataset.item);
+    openItems.add(li.dataset.item); saveOpen(); renderGantt();
+    const row = $(`.g-item[data-id="${CSS.escape(li.dataset.item)}"]`);
+    if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
   });
 
-  // ---------- Dialogs ----------
+  // ---------- Dialog ----------
   const dlg = $("#editDialog");
   const options = (map, sel) => Object.entries(map).map(([v, l]) => `<option value="${v}" ${v === sel ? "selected" : ""}>${l}</option>`).join("");
   const taskRow = (t) => `<div class="trow">
       <select name="status" aria-label="Status">${options(STATUS_LABEL, t.status)}</select>
       <input name="task" value="${esc(t.task)}" placeholder="What needs to be done" aria-label="Task">
       <input type="date" name="due" value="${esc(t.due || "")}" aria-label="Due date">
+      <select name="flag" aria-label="Key date">${options(FLAG_LABEL, t.countdown ? "countdown" : t.key ? "key" : "")}</select>
+      <label class="tbc-check" title="Date still to be confirmed"><input type="checkbox" name="tbc" ${t.tbc ? "checked" : ""}>TBC</label>
       <button type="button" class="del" title="Delete task" aria-label="Delete task">✕</button></div>`;
   const nextId = () => { const ids = new Set(P.timeline.map((t) => t.id)); let n = P.timeline.length; while (ids.has("T" + n)) n++; return "T" + n; };
 
   function openItemDialog(id) {
     const isNew = !id;
-    const it = isNew ? { id: nextId(), name: "", start: TODAY, end: addDays(TODAY, 13), category: "setup" } : P.timeline.find((t) => t.id === id);
+    const it = isNew ? { id: nextId(), name: "", start: TODAY, end: addDays(TODAY, 4), category: "setup" } : P.timeline.find((t) => t.id === id);
     if (!it) return;
     const tasks = isNew ? [] : tasksOf(id);
     dlg.innerHTML = `<form class="dlg" id="dlgForm">
-      <h3>${isNew ? "New timeline item" : "Edit timeline item"}</h3>
-      <label>Name<input name="name" required value="${esc(it.name)}" placeholder="e.g. Pilot study, or Meeting with expert statistician"></label>
+      <h3>${isNew ? "New block" : "Edit block"}</h3>
+      <label>Name<input name="name" required value="${esc(it.name)}" placeholder="e.g. Week 9 · Pilot study"></label>
       <div class="row2"><label>Start<input type="date" name="start" required value="${esc(it.start)}"></label>
-        <label>End <span class="hint">— leave empty for a single date ◆</span><input type="date" name="end" value="${esc(it.end || "")}"></label></div>
+        <label>End<input type="date" name="end" value="${esc(endOf(it))}"></label></div>
+      <p class="hint" id="wkHint"></p>
       <label>Category (colour)<select name="category">${options(CAT_LABEL, it.category)}</select></label>
-      <label class="check"><input type="checkbox" name="tbc" ${it.tbc ? "checked" : ""}> Date still to be confirmed (TBC)</label>
-      <label class="check"><input type="checkbox" name="key" ${it.key ? "checked" : ""}> Key date: show a countdown at the top of the page</label>
-      <h4>Tasks (${tasks.length})</h4>
+      <label class="check"><input type="checkbox" name="tbc" ${it.tbc ? "checked" : ""}> Dates still to be confirmed (TBC)</label>
+      <h4>Tasks (${tasks.length}) <span class="hint">· ★ key dates show as a tick on the bar and under Key dates; "+ countdown" also adds a countdown at the top</span></h4>
       <div class="trows" id="trows">${tasks.map(taskRow).join("")}</div>
       <div><button type="button" id="addTaskRow">+ Add task</button></div>
-      <footer>${isNew ? "" : '<button type="button" class="danger" id="dlgDelete">Delete</button>'}<span class="spacer"></span>
+      <footer>${isNew ? "" : '<button type="button" class="danger" id="dlgDelete">Delete block</button>'}<span class="spacer"></span>
         <button type="button" id="dlgCancel">Cancel</button><button type="submit" class="primary">${isNew ? "Add" : "Save"}</button></footer>
     </form>`;
-    $("#addTaskRow").onclick = () => { $("#trows").insertAdjacentHTML("beforeend", taskRow({ task: "", status: "todo", due: "" })); $("#trows").lastElementChild.querySelector("[name=task]").focus(); };
+    const form = $("#dlgForm");
+    const wkHint = () => {
+      const s = form.start.value, en = form.end.value || s;
+      $("#wkHint").textContent = s ? `Thesis ${weekRange({ start: s, end: en < s ? s : en })}` : "";
+    };
+    form.start.addEventListener("input", wkHint); form.end.addEventListener("input", wkHint); wkHint();
+    $("#addTaskRow").onclick = () => { $("#trows").insertAdjacentHTML("beforeend", taskRow({ task: "", status: "todo", due: form.end.value || "" })); $("#trows").lastElementChild.querySelector("[name=task]").focus(); };
     $("#trows").onclick = (e) => { const d = e.target.closest(".del"); if (d) d.closest(".trow").remove(); };
     $("#dlgCancel").onclick = () => dlg.close();
     if (!isNew) $("#dlgDelete").onclick = () => {
@@ -426,22 +476,23 @@
       change(() => { P.timeline = P.timeline.filter((t) => t.id !== id); P.tasks = P.tasks.filter((t) => t.item !== id); });
       toast("Deleted — Ctrl+Z to undo");
     };
-    $("#dlgForm").onsubmit = (e) => {
+    form.onsubmit = (e) => {
       e.preventDefault();
-      const f = new FormData(e.target);
+      const f = new FormData(form);
       let s = f.get("start"), en = f.get("end") || "";
       if (en && en < s) [s, en] = [en, s];
       const out = { id: it.id, name: f.get("name").trim(), start: s };
       if (en && en !== s) out.end = en;
       out.category = f.get("category");
       if (f.has("tbc")) out.tbc = true;
-      if (f.has("key")) out.key = true;
-      const newTasks = $$("#trows .trow").map((r) => ({
-        item: it.id,
-        task: r.querySelector("[name=task]").value.trim(),
-        due: r.querySelector("[name=due]").value || undefined,
-        status: r.querySelector("[name=status]").value
-      })).filter((t) => t.task);
+      const newTasks = $$("#trows .trow").map((r) => {
+        const flag = r.querySelector("[name=flag]").value;
+        const t = { item: it.id, task: r.querySelector("[name=task]").value.trim(), due: r.querySelector("[name=due]").value || undefined, status: r.querySelector("[name=status]").value };
+        if (flag) t.key = true;
+        if (flag === "countdown") t.countdown = true;
+        if (r.querySelector("[name=tbc]").checked) t.tbc = true;
+        return t;
+      }).filter((t) => t.task);
       dlg.close();
       change(() => {
         if (isNew) {
@@ -452,11 +503,11 @@
         const rest = P.tasks.filter((t) => t.item !== it.id);
         rest.splice(at < 0 ? rest.length : at, 0, ...newTasks);
         P.tasks = rest;
-        openPhases.add(it.id);
+        if (newTasks.length) { openItems.add(it.id); saveOpen(); }
       });
     };
     dlg.showModal();
-    if (isNew) dlg.querySelector("[name=name]").focus();
+    if (isNew) form.name.focus();
   }
 
   // ---------- Saving ----------

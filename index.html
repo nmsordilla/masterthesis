@@ -16,7 +16,6 @@
       <nav class="nav" aria-label="Sections">
         <a href="#overview">Overview</a>
         <a href="#timeline">Timeline</a>
-        <a href="#work">Work plan</a>
         <a href="#method">Method</a>
         <a href="#presentations">Presentations</a>
         <a href="#background">Background</a>
@@ -70,15 +69,15 @@
       </div>
     </section>
 
-    <!-- TIMELINE -->
+    <!-- TIMELINE & WORK PLAN -->
     <section id="timeline">
-      <h2>Timeline</h2>
-      <p class="muted">October 2026 → June 2027. The dashed line is today. Dates marked <span class="pill tbc">TBC</span> still need confirming with the faculty or supervisors.</p>
+      <h2>Timeline &amp; work plan</h2>
+      <p class="muted">Numbers along the top are thesis weeks; the current week is highlighted and the dashed line is today. Click a row to see its tasks, and ★ marks a key date. Dates marked <span class="pill tbc">TBC</span> still need confirming.</p>
       <div id="banner"></div>
       <div class="toolbar" id="toolbar" hidden>
         <label class="switch"><input type="checkbox" id="editToggle"><span class="slider" aria-hidden="true"></span>Edit mode</label>
         <div class="edit-actions">
-          <button type="button" id="addItem">+ Add item</button>
+          <button type="button" id="addItem">+ Add block</button>
           <button type="button" id="sortBtn" title="Reorder the timeline by start date">Sort by date</button>
           <button type="button" id="undoBtn" title="Undo (Ctrl+Z)">↶ Undo</button>
           <span class="spacer"></span>
@@ -88,26 +87,28 @@
           <button type="button" id="saveBtn" class="primary">Save plan.js</button>
         </div>
       </div>
-      <p class="edit-hint">Every row is one item: a bar (date range) or a ◆ (single date). Drag to move · drag a bar's ends to change start / end · click to edit name, dates, colour and tasks · ▲▼ swap order.</p>
-      <div class="gantt-scroll">
-        <div class="gantt" id="gantt" role="img" aria-label="Gantt chart of thesis phases"></div>
-      </div>
-      <h3>Dates &amp; breaks</h3>
-      <ol class="milestones" id="milestones"></ol>
-    </section>
+      <p class="edit-hint">Drag a bar to move it, or drag its ends to change the dates · ✎ or click a bar to edit its name, dates, colour and tasks · click a task's circle to change its status · ▲▼ to reorder.</p>
 
-    <!-- WORK PLAN -->
-    <section id="work">
-      <h2>Work plan &amp; progress</h2>
-      <div class="overall" id="overall"></div>
-      <div class="filters" role="group" aria-label="Filter tasks">
-        <button type="button" data-filter="all" class="active">All</button>
-        <button type="button" data-filter="open">Open</button>
-        <button type="button" data-filter="doing">In progress</button>
-        <button type="button" data-filter="overdue">Overdue</button>
-        <button type="button" data-filter="done">Done</button>
+      <div class="plan-controls">
+        <div class="overall" id="overall"></div>
+        <div class="filters" role="group" aria-label="Filter tasks">
+          <button type="button" data-filter="all" class="active">All</button>
+          <button type="button" data-filter="open">Open</button>
+          <button type="button" data-filter="doing">In progress</button>
+          <button type="button" data-filter="overdue">Overdue</button>
+          <button type="button" data-filter="done">Done</button>
+          <span class="spacer"></span>
+          <button type="button" id="expandAll">Expand all</button>
+          <button type="button" id="collapseAll">Collapse all</button>
+        </div>
       </div>
-      <div id="phases"></div>
+
+      <div class="gantt-scroll">
+        <div class="gantt" id="gantt" aria-label="Timeline with tasks per block"></div>
+      </div>
+
+      <h3>Key dates &amp; breaks</h3>
+      <ol class="milestones" id="milestones"></ol>
     </section>
 
     <!-- METHOD -->
