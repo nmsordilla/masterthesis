@@ -132,23 +132,25 @@
       <div class="grid2">
         <article class="card">
           <h3>1 · Gold-standard reference</h3>
-          <p>A published trial protocol that reports its own pre-specified priors; otherwise the outcome of an in-house BREATHE trial. Prefer several reference trials, and trials completed <em>after</em> the LLMs' knowledge cutoffs, so an "accurate" prior is not just recall.</p>
+          <p>4–6 benchmark trials (2–3 successful, 2–3 failed): an in-house UZ Leuven / BREATHE respiratory trial and/or published trials (e.g. COPD). Each trial's observed primary-endpoint result (RR, OR or HR with 95% CI) becomes a ground-truth Normal distribution p̂<sub>MLE</sub>(θ) = N(θ̂<sub>MLE</sub>, σ²<sub>MLE</sub>) on the log scale.</p>
+          <p><strong>Anti-leakage:</strong> the LLM only sees a pre-trial evidence dossier (Phase II data, indication, mechanism, endpoint scale), in an unblinded version (real names, tests memorisation) and a blinded one ("Compound X-33").</p>
         </article>
         <article class="card">
           <h3>2 · Prompting strategies &amp; models</h3>
           <ul>
-            <li>Direct zero-shot instruction</li>
-            <li>Riegler et al. structured prompt (simulated literature review)</li>
+            <li>Direct: Riegler et al. (2025) baseline, μ₀ and σ₀ for moderately vs weakly informative priors</li>
+            <li>SHELF quantiles: elicit P01, P25, P50, P75, P99, then fit N(μ₀, σ₀²) by least squares / IQR</li>
             <li>Chain-of-thought over the treatment mechanism</li>
-            <li>Self-consistency: sample <em>k</em> priors, pool as a mixture (AutoElicit-style)</li>
+            <li>Self-consistency: 10 temperature-sampled runs, pooled (AutoElicit-style)</li>
+            <li>Skeptical vs enthusiastic archetypes</li>
             <li>Retrieval-grounded on PubMed / ClinicalTrials.gov</li>
             <li>Simulated SHELF panel: several LLM "experts" + facilitator LLM</li>
           </ul>
-          <p>Models: GPT, Gemini, Claude (+ an open-weight model if trial data cannot leave UZ Leuven). Elicit 5th/50th/95th percentiles, then fit the parametric family SHELF-style rather than asking for σ directly.</p>
+          <p>Models: Claude, Gemini, ChatGPT (+ an open-weight model if trial data cannot leave UZ Leuven).</p>
         </article>
         <article class="card">
           <h3>3 · Rationale &amp; hallucination detection</h3>
-          <p>Every prior comes with a written rationale and references. Check: does each reference exist (DOI / PMID / NCT resolves)? Does it support the claim it is cited for? Does this step catch unsupported priors before they are used?</p>
+          <p>Every prior comes with a written rationale and references. Check: does each reference exist (DOI / PMID / NCT resolves)? Does it support the claim it is cited for? Does RAG (feeding real PubMed abstracts) reduce hallucinated citations?</p>
         </article>
         <article class="card">
           <h3>4 · Expert &amp; regulatory review</h3>
@@ -156,7 +158,7 @@
         </article>
         <article class="card wide">
           <h3>5 · Downstream impact on futility detection</h3>
-          <p>Integrate the best-performing strategy into the group's futility prediction model. On simulated truly-futile and truly-effective trials, compare LLM, uninformative and expert-elicited priors on stopping time, correct-stop rate and wrong-stop rate, including under prior–data conflict.</p>
+          <p>Plug the LLM priors into the group's PPoS futility model with interim analyses at 25% and 50% enrolment. Compare LLM, uninformative and expert-elicited priors on stopping time, correct-stop rate and wrong-stop rate, including under prior–data conflict. Hard code freeze: 9 April 2027.</p>
         </article>
       </div>
 
@@ -165,11 +167,10 @@
         <table>
           <thead><tr><th>Sub-goal</th><th>Metric</th><th>What it captures</th></tr></thead>
           <tbody>
-            <tr><td rowspan="5"><span class="chip sg1">SG1</span></td><td>KL divergence (both directions)</td><td>Penalises over- vs under-confidence asymmetrically</td></tr>
-            <tr><td>Wasserstein distance</td><td>Location + spread error on the effect scale</td></tr>
-            <tr><td>Density overlap</td><td>Bounded, interpretable similarity</td></tr>
-            <tr><td>90% interval coverage of reference effect</td><td>Calibration</td></tr>
-            <tr><td>ESS ratio vs gold standard</td><td>How much information the prior claims (key for early PPoS)</td></tr>
+            <tr><td rowspan="4"><span class="chip sg1">SG1</span></td><td>KL divergence D<sub>KL</sub>(p̂<sub>MLE</sub> ‖ p), closed form</td><td>Penalises priors that put little mass where the trial result is (overconfidence)</td></tr>
+            <tr><td>Prior–data conflict Z-score</td><td>How far the observed effect sits in the prior's tail</td></tr>
+            <tr><td>Interval coverage of the observed effect</td><td>Calibration</td></tr>
+            <tr><td>Successful vs failed trials, blinded vs unblinded</td><td>Optimism bias and memorisation</td></tr>
             <tr><td rowspan="3"><span class="chip sg2">SG2</span></td><td>% references that exist</td><td>Fabricated citations</td></tr>
             <tr><td>% references that support the claim</td><td>Misattributed evidence</td></tr>
             <tr><td>Expert rubric score</td><td>Regulator-readiness of the rationale</td></tr>
