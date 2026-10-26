@@ -47,6 +47,39 @@ load_env()
 DEFAULT_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5-mini")
 LOG_FILE = Path(__file__).parent / "logs" / "openai_calls.jsonl"
 
+# USD per 1M tokens: (input, cached input, output). Standard tier, short context (≤272K input).
+# From https://developers.openai.com/api/docs/pricing, checked 2026-10-26 — update when prices change.
+# Output tokens include hidden reasoning tokens, which are billed as output.
+PRICES = {
+    "gpt-6-astra": (10.00, 1.00, 50.00),
+    "gpt-6.1-sol": (2.00, 0.10, 10.00),
+    "gpt-6.1-terra": (1.00, 0.05, 5.00),
+    "gpt-6-sol": (2.00, 0.20, 10.00),
+    "gpt-6-luna": (0.10, 0.01, 0.50),
+    "gpt-5.6-sol": (4.00, 0.40, 20.00),
+    "gpt-5.6-terra": (2.00, 0.20, 12.00),
+    "gpt-5.6-luna": (0.20, 0.02, 1.20),
+    "gpt-5.5-pro": (30.00, 30.00, 180.00),
+    "gpt-5.5": (5.00, 0.50, 30.00),
+    "gpt-5.4-pro": (30.00, 30.00, 180.00),
+    "gpt-5.4-mini": (0.75, 0.075, 4.50),
+    "gpt-5.4-nano": (0.20, 0.02, 1.25),
+    "gpt-5.4": (2.50, 0.25, 15.00),
+    "gpt-5.2-pro": (21.00, 21.00, 168.00),
+    "gpt-5.2": (1.75, 0.175, 14.00),
+    "gpt-5.1": (1.25, 0.125, 10.00),
+    "gpt-5-mini": (0.25, 0.025, 2.00),
+    "gpt-5-nano": (0.05, 0.005, 0.40),
+    "gpt-5": (1.25, 0.125, 10.00),
+    "gpt-4.1-mini": (0.40, 0.10, 1.60),
+    "gpt-4.1-nano": (0.10, 0.025, 0.40),
+    "gpt-4.1": (2.00, 0.50, 8.00),
+    "gpt-4o-mini": (0.15, 0.075, 0.60),
+    "gpt-4o": (2.50, 1.25, 10.00),
+    "o4-mini": (1.10, 0.275, 4.40),
+    "o3": (2.00, 0.50, 8.00),
+}
+
 _client = None
 
 
@@ -75,7 +108,7 @@ def ask(
         model: Model name, e.g. "gpt-5-mini" or "gpt-4.1". Defaults to $OPENAI_MODEL.
         temperature: Sampling temperature. Leave as None for reasoning models
             (e.g. the gpt-5 family), which do not accept it.
-        log: Append the call (prompt, settings, answer, timing) to logs/openai_calls.jsonl.
+        log: Append the call (prompt, settings, answer, tokens, cost, timing) to logs/openai_calls.jsonl.
 
     Returns:
         The model's answer as a string.
@@ -95,10 +128,44 @@ def ask(
     return answer
 
 
+def price_for(model: str) -> tuple[float, float, float] | None:
+    """Look up prices by the longest matching name, so "gpt-5-mini-2025-08-07" → "gpt-5-mini"."""
+    matches = [name for name in PRICES if model == name or model.startswith(name + "-")]
+    return PRICES[max(matches, key=len)] if matches else None
+
+
+def call_cost(model: str, input_tokens: int, cached_tokens: int, output_tokens: int) -> float | None:
+    """Cost of one call in USD, or None if the model is not in PRICES."""
+    price = price_for(model)
+    if price is None:
+        return None
+    p_in, p_cached, p_out = price
+    return ((input_tokens - cached_tokens) * p_in + cached_tokens * p_cached + output_tokens * p_out) / 1_000_000
+
+
+def total_cost(log_file: Path = LOG_FILE) -> float:
+    """Sum of cost_usd over every call in the log."""
+    if not log_file.exists():
+        return 0.0
+    total = 0.0
+    for line in log_file.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            total += json.loads(line).get("cost_usd") or 0.0
+    return total
+
+
 def _log_call(params: dict, response, answer: str, seconds: float) -> None:
     """Write one JSON line per call so every prior can be traced back to its prompt."""
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     usage = getattr(response, "usage", None)
+    input_tokens = getattr(usage, "input_tokens", 0) or 0
+    output_tokens = getattr(usage, "output_tokens", 0) or 0
+    cached_tokens = getattr(getattr(usage, "input_tokens_details", None), "cached_tokens", 0) or 0
+    reasoning_tokens = getattr(getattr(usage, "output_tokens_details", None), "reasoning_tokens", 0) or 0
+    model = getattr(response, "model", None) or params["model"]
+    cost = call_cost(model, input_tokens, cached_tokens, output_tokens)
+    if cost is None:
+        print(f"[openai_client] No price for model '{model}'; add it to PRICES to track cost.", file=sys.stderr)
     record = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "model_requested": params["model"],
@@ -108,8 +175,12 @@ def _log_call(params: dict, response, answer: str, seconds: float) -> None:
         "system": params.get("instructions"),
         "prompt": params["input"],
         "answer": answer,
-        "input_tokens": getattr(usage, "input_tokens", None),
-        "output_tokens": getattr(usage, "output_tokens", None),
+        "input_tokens": input_tokens,
+        "cached_input_tokens": cached_tokens,
+        "output_tokens": output_tokens,
+        "reasoning_tokens": reasoning_tokens,
+        "cost_usd": round(cost, 6) if cost is not None else None,
+        "total_cost_usd": round(total_cost() + (cost or 0.0), 6),
         "seconds": round(seconds, 2),
     }
     with LOG_FILE.open("a", encoding="utf-8") as f:
@@ -119,3 +190,4 @@ def _log_call(params: dict, response, answer: str, seconds: float) -> None:
 if __name__ == "__main__":
     question = " ".join(sys.argv[1:]) or "In one sentence, what is a Bayesian prior distribution?"
     print(ask(question, system="You are a concise biostatistics assistant."))
+    print(f"\n[total spent so far: ${total_cost():.4f}]")
