@@ -13,12 +13,13 @@ Open `index.html` in a browser. No build step, no server, no dependencies.
 
 ### In the browser (Edit mode)
 
-Open the local copy (`explorer.exe index.html`) and switch on **Edit mode** above the timeline:
+Open the local copy (`explorer.exe index.html`) and switch on **Edit mode** above the timeline.
 
-- **Drag a bar** to move a phase; **drag its ends** to change start / end
-- **Click a bar or its name** to rename it, change dates or colour, and add / edit / delete its tasks
-- **Drag a ◆** to move an event; click it (or a row under *Key dates*) to edit or delete it
-- **▲▼** next to a phase swaps its order; **+ Phase** / **+ Event** add new ones
+Everything on the timeline is one kind of thing, an **item**: a bar if it has a start and end date, a ◆ if it has only one date. Each item has a name, a colour (category), optional tasks, and two switches: *TBC* (date not confirmed) and *Key date* (countdown at the top).
+
+- **Drag** a bar or ◆ to move it; **drag a bar's ends** to change start / end
+- **Click** an item (or its name) to edit it and its tasks; clear *End* to turn a bar into a ◆, fill it to turn a ◆ into a bar
+- **▲▼** swaps rows; **Sort by date** reorders everything; **+ Add item** adds one
 - In *Work plan*, click a task's status circle to cycle to do → in progress → done → blocked
 - **Undo** (Ctrl+Z); edits are kept as a draft in your browser until you save
 
@@ -30,8 +31,8 @@ Edit mode only appears on the local copy (or with `?edit` in the URL), not to vi
 
 | What | Where |
 |---|---|
-| Tasks, statuses, due dates | `data/plan.js` → `tasks` (`todo` / `doing` / `done` / `blocked`) |
-| Milestones and confirmed dates | `data/plan.js` → `milestones` (remove `tbc: true` once confirmed) |
+| Timeline (bars and dates) | `data/plan.js` → `timeline` (remove `tbc: true` once a date is confirmed) |
+| Tasks, statuses, due dates | `data/plan.js` → `tasks` (`item` = the timeline item's id; status `todo` / `doing` / `done` / `blocked`) |
 | Meeting agenda, notes, action items | `data/plan.js` → `meetings` |
 | Design decisions | `data/plan.js` → `decisions` (`open` → `decided`) |
 | Progress log | `data/plan.js` → `log` |

@@ -13,6 +13,7 @@
   --setup: #7a7a7a;
   --writing: #7b4fb3;
   --milestone: #c2334d;
+  --meeting: #0f8b8d;
   --done: #2e8b57;
   --doing: #2a6fdb;
   --blocked: #c2334d;
@@ -26,7 +27,7 @@
     --bg: #141412; --surface: #1c1c1a; --surface-2: #252522; --text: #ecebe6;
     --muted: #a3a19a; --border: #34332f; --accent: #7fa8e6; --accent-soft: #1e2a3d;
     --sg1: #6d9ff0; --sg2: #e09a52; --sg3: #5cbf86; --setup: #9a9a9a; --writing: #ad8be0;
-    --milestone: #ec6a80; --done: #5cbf86; --doing: #6d9ff0; --blocked: #ec6a80; --today: #ec6a80;
+    --milestone: #ec6a80; --meeting: #4fc1c3; --done: #5cbf86; --doing: #6d9ff0; --blocked: #ec6a80; --today: #ec6a80;
     color-scheme: dark;
   }
 }
@@ -34,7 +35,7 @@
   --bg: #141412; --surface: #1c1c1a; --surface-2: #252522; --text: #ecebe6;
   --muted: #a3a19a; --border: #34332f; --accent: #7fa8e6; --accent-soft: #1e2a3d;
   --sg1: #6d9ff0; --sg2: #e09a52; --sg3: #5cbf86; --setup: #9a9a9a; --writing: #ad8be0;
-  --milestone: #ec6a80; --done: #5cbf86; --doing: #6d9ff0; --blocked: #ec6a80; --today: #ec6a80;
+  --milestone: #ec6a80; --meeting: #4fc1c3; --done: #5cbf86; --doing: #6d9ff0; --blocked: #ec6a80; --today: #ec6a80;
   color-scheme: dark;
 }
 
@@ -118,7 +119,12 @@ section.hero { border-top: 0; padding-top: 2rem; }
 .g-break { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--muted) 14%, transparent) 6px 8px); }
 .g-today { position: absolute; top: 0; bottom: 0; border-left: 2px dashed var(--today); }
 .g-today span { position: absolute; top: 2px; left: 4px; font-size: .7rem; color: var(--today); font-weight: 700; background: var(--surface); padding: 0 2px; }
-.g-diamond { position: absolute; width: 12px; height: 12px; transform: translate(-6px, 0) rotate(45deg); background: var(--milestone); top: 11px; }
+.g-diamond { position: absolute; width: 12px; height: 12px; transform: translate(-6px, 0) rotate(45deg); background: var(--c); top: 11px; border-radius: 2px; }
+.g-diamond.key { width: 15px; height: 15px; top: 9px; transform: translate(-7.5px, 0) rotate(45deg); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 25%, transparent); }
+.g-bar.break { background: repeating-linear-gradient(135deg, transparent 0 5px, color-mix(in srgb, var(--c) 35%, transparent) 5px 7px); border-style: dashed; }
+.g-label .dot { color: var(--c); font-size: .7rem; }
+.g-row.single .g-label { color: var(--muted); }
+.hint { font-weight: 400; }
 .g-mrow .g-label { font-weight: 600; }
 
 .milestones { list-style: none; padding: 0; margin: 0; display: grid; gap: .35rem; }

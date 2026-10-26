@@ -78,8 +78,8 @@
       <div class="toolbar" id="toolbar" hidden>
         <label class="switch"><input type="checkbox" id="editToggle"><span class="slider" aria-hidden="true"></span>Edit mode</label>
         <div class="edit-actions">
-          <button type="button" id="addPhase">+ Phase</button>
-          <button type="button" id="addMilestone">+ Event</button>
+          <button type="button" id="addItem">+ Add item</button>
+          <button type="button" id="sortBtn" title="Reorder the timeline by start date">Sort by date</button>
           <button type="button" id="undoBtn" title="Undo (Ctrl+Z)">↶ Undo</button>
           <span class="spacer"></span>
           <span id="dirtyNote" class="dirty-note"></span>
@@ -88,11 +88,11 @@
           <button type="button" id="saveBtn" class="primary">Save plan.js</button>
         </div>
       </div>
-      <p class="edit-hint">Drag a bar to move it · drag its ends to change start / end · click a bar or name to edit its tasks · drag ◆ to move an event, click it to edit · ▲▼ swap order.</p>
+      <p class="edit-hint">Every row is one item: a bar (date range) or a ◆ (single date). Drag to move · drag a bar's ends to change start / end · click to edit name, dates, colour and tasks · ▲▼ swap order.</p>
       <div class="gantt-scroll">
         <div class="gantt" id="gantt" role="img" aria-label="Gantt chart of thesis phases"></div>
       </div>
-      <h3>Key dates</h3>
+      <h3>Dates &amp; breaks</h3>
       <ol class="milestones" id="milestones"></ol>
     </section>
 

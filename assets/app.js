@@ -24,9 +24,8 @@
     del(k) { try { localStorage.removeItem(k); } catch (e) {} }
   };
 
-  const GOAL_COLOR = { setup: "--setup", sg1: "--sg1", sg2: "--sg2", sg3: "--sg3", writing: "--writing", milestone: "--milestone" };
-  const GOAL_LABEL = { setup: "Setup / background", sg1: "Sub-goal 1 · accuracy", sg2: "Sub-goal 2 · documentation", sg3: "Sub-goal 3 · futility", writing: "Writing", milestone: "Presentation / milestone" };
-  const KIND_LABEL = { milestone: "Milestone", deadline: "Deadline", meeting: "Meeting", break: "Break / period" };
+  const CAT_COLOR = { setup: "--setup", sg1: "--sg1", sg2: "--sg2", sg3: "--sg3", writing: "--writing", deadline: "--milestone", meeting: "--meeting", break: "--setup" };
+  const CAT_LABEL = { setup: "Setup / background", sg1: "Sub-goal 1 · accuracy", sg2: "Sub-goal 2 · documentation", sg3: "Sub-goal 3 · futility", writing: "Writing", deadline: "Presentation / deadline", meeting: "Meeting", break: "Break (exams, holidays)" };
   const STATUSES = ["todo", "doing", "done", "blocked"];
   const STATUS_LABEL = { todo: "To do", doing: "In progress", done: "Done", blocked: "Blocked" };
 
@@ -40,7 +39,12 @@
  * Everything dynamic on the site (countdowns, timeline, task progress,
  * meetings, decisions, progress log) is rendered from this object.
  * Dates are ISO strings (YYYY-MM-DD). Task status: "todo" | "doing" | "done" | "blocked".
- * Set \`tbc: true\` on a milestone whose date is not yet confirmed.
+ *
+ * timeline: one list of items. An item with \`start\` and \`end\` is a bar;
+ * an item with only \`start\` is a single date (◆).
+ * category: "setup" | "sg1" | "sg2" | "sg3" | "writing" | "deadline" | "meeting" | "break"
+ * tbc: true → date still to be confirmed      key: true → countdown at the top
+ * Tasks belong to a timeline item through its \`id\` (task.item).
  *
  * Kept as a .js file (not .json) so the site also works when opened
  * directly from disk (file://), where browsers block fetch().
@@ -50,7 +54,7 @@
   const line = (o) => "{ " + Object.entries(o).filter(([k, v]) => keep(v) || k === "decision").map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join(", ") + " }";
   const arr = (a) => (a && a.length ? "[\n" + a.map((o) => "    " + line(o)).join(",\n") + "\n  ]" : "[]");
   const pretty = (v) => JSON.stringify(v, null, 2).replace(/\n/g, "\n  ");
-  const LIST_KEYS = ["milestones", "phases", "tasks", "decisions", "log"];
+  const LIST_KEYS = ["timeline", "tasks", "decisions", "log"];
   function serialize(p) {
     const parts = Object.keys(p).map((k) => {
       const key = /^[A-Za-z_$][\w$]*$/.test(k) ? k : JSON.stringify(k);
@@ -75,7 +79,7 @@
 
   try {
     const d = JSON.parse(store.get(DRAFT_KEY) || "null");
-    if (d && d.plan) {
+    if (d && d.plan && Array.isArray(d.plan.timeline)) {
       if (planHash(d.plan) === fileBase) store.del(DRAFT_KEY);           // plan.js already contains the draft
       else if (d.base === fileBase) { P = d.plan; if (d.downloaded) savedHash = planHash(P); }
       else staleDraft = d;                                               // plan.js changed since the draft was made
@@ -91,7 +95,6 @@
     history.push(clone(P));
     if (history.length > 100) history.shift();
     fn();
-    P.milestones.sort((a, b) => a.date.localeCompare(b.date));
     persistDraft();
     render();
   }
@@ -130,17 +133,17 @@
     if (P.meta.repo) people.push(["Code", `<a href="${esc(P.meta.repo)}">${esc(P.meta.repo.replace(/^https?:\/\//, ""))}</a>`]);
     $("#people").innerHTML = people.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("");
 
-    const next = P.milestones.filter((m) => daysUntil(m.end || m.date) >= 0 && m.kind !== "break")[0];
+    const next = byDate(P.timeline.filter((t) => !isRange(t) && t.category !== "break" && daysUntil(t.start) >= 0))[0];
     const counters = [];
-    if (next && !next.highlight) counters.push(Object.assign({ label: "Next up" }, next));
-    P.milestones.filter((m) => m.highlight).forEach((m) => counters.push(Object.assign({ label: m.title }, m)));
+    if (next && !next.key) counters.push(Object.assign({}, next, { label: "Next up" }));
+    byDate(P.timeline.filter((t) => t.key)).forEach((t) => counters.push(Object.assign({}, t, { label: t.name })));
     $("#countdowns").innerHTML = counters.map((m) => {
-      const n = daysUntil(m.date);
-      return `<div class="count${m.highlight ? " highlight" : ""}">
+      const n = daysUntil(m.start);
+      return `<div class="count${m.key ? " highlight" : ""}">
         <div class="lbl">${esc(m.label)}${tbc(m)}</div>
         <div class="n">${n >= 0 ? n : "✓"}</div>
-        <div class="d">${n >= 0 ? `days · ~${Math.floor(n / 7)} weeks` : "done"} · ${fmt(m.date)}</div>
-        ${m.label === "Next up" ? `<div class="d">${esc(m.title)}</div>` : ""}
+        <div class="d">${n >= 0 ? `days · ~${Math.floor(n / 7)} weeks` : "done"} · ${fmt(m.start)}</div>
+        ${m.label === "Next up" ? `<div class="d">${esc(m.name)}</div>` : ""}
       </div>`;
     }).join("");
   }
@@ -148,12 +151,17 @@
   // ---------- Render: Gantt ----------
   const G = { start: null, span: 1 };
   const pct = (d) => (((typeof d === "string" ? parse(d) : d) - G.start) / G.span) * 100;
-  const tasksOf = (id) => P.tasks.filter((t) => t.phase === id);
+  const tasksOf = (id) => P.tasks.filter((t) => t.item === id);
+  const isRange = (t) => !!t.end && t.end > t.start;
+  const byDate = (list) => [...list].sort((a, b) => a.start.localeCompare(b.start) || (a.end || a.start).localeCompare(b.end || b.start));
+  const itemDates = (t, long) => isRange(t)
+    ? `${fmt(t.start, { day: "numeric", month: "short" })} → ${fmt(t.end)}`
+    : fmt(t.start, long ? { weekday: "short", day: "numeric", month: "short", year: "numeric" } : undefined);
   const phaseProgress = (id) => { const ts = tasksOf(id); return ts.length ? ts.filter((t) => t.status === "done").length / ts.length : 0; };
-  const colorOf = (goal) => `var(${GOAL_COLOR[goal] || "--accent"})`;
+  const colorOf = (cat) => `var(${CAT_COLOR[cat] || "--accent"})`;
 
   function renderGantt() {
-    const allDates = [...P.phases.flatMap((p) => [p.start, p.end]), ...P.milestones.flatMap((m) => [m.date, m.end].filter(Boolean)), TODAY].map(parse);
+    const allDates = [...P.timeline.flatMap((t) => [t.start, t.end].filter(Boolean)), TODAY].map(parse);
     const min = new Date(Math.min(...allDates)); const max = new Date(Math.max(...allDates));
     G.start = new Date(min.getFullYear(), min.getMonth(), 1);
     const gEnd = new Date(max.getFullYear(), max.getMonth() + 1, 1);
@@ -167,35 +175,38 @@
       months.map((d, i) => `<div class="g-month">${d.toLocaleDateString("en-GB", { month: "short" })}${d.getMonth() === 0 || i === 0 ? " " + d.getFullYear() : ""}</div>`).join("") + "</div>";
     g += `<div style="position:relative"><div class="g-overlay">` +
       months.map((d) => `<div class="g-grid" style="left:${pct(d)}%"></div>`).join("") +
-      P.milestones.filter((m) => m.kind === "break" && m.end).map((m) => `<div class="g-break" title="${esc(m.title)}" style="left:${pct(m.date)}%;width:${pct(m.end) - pct(m.date)}%"></div>`).join("") +
+      P.timeline.filter((t) => t.category === "break" && isRange(t)).map((t) => `<div class="g-break" style="left:${pct(t.start)}%;width:${pct(addDays(t.end, 1)) - pct(t.start)}%"></div>`).join("") +
       `<div class="g-today" style="left:${pct(today)}%"><span>Today</span></div></div>`;
 
-    P.phases.forEach((p, i) => {
-      const prog = Math.round(phaseProgress(p.id) * 100);
-      g += `<div class="g-row"><div class="g-label" title="${esc(p.name)}">
-          <span class="g-move"><button type="button" data-act="up" data-id="${esc(p.id)}" ${i === 0 ? "disabled" : ""} aria-label="Move up">▲</button><button type="button" data-act="down" data-id="${esc(p.id)}" ${i === P.phases.length - 1 ? "disabled" : ""} aria-label="Move down">▼</button></span>
-          <span class="lname" data-id="${esc(p.id)}">${esc(p.name)}</span></div>
-        <div class="g-track"><div class="g-bar${p.goal === "milestone" ? " milestone" : ""}" data-id="${esc(p.id)}"
-          style="--c:${colorOf(p.goal)};left:${pct(p.start)}%;width:${Math.max(pct(addDays(p.end, 1)) - pct(p.start), 0.6)}%"
-          title="${esc(p.name)}: ${fmt(p.start)} → ${fmt(p.end)} · ${prog}% done">
-          <span class="rz l"></span><div class="fill" style="width:${prog}%"></div><span class="rz r"></span></div></div></div>`;
+    P.timeline.forEach((t, i) => {
+      const c = colorOf(t.category);
+      const tip = `${esc(t.name)} · ${itemDates(t)}${t.tbc ? " (TBC)" : ""}`;
+      let mark;
+      if (isRange(t)) {
+        const prog = Math.round(phaseProgress(t.id) * 100);
+        mark = `<div class="g-bar${t.category === "break" ? " break" : ""}" data-id="${esc(t.id)}"
+          style="--c:${c};left:${pct(t.start)}%;width:${Math.max(pct(addDays(t.end, 1)) - pct(t.start), 0.6)}%"
+          title="${tip}${tasksOf(t.id).length ? ` · ${prog}% done` : ""}">
+          <span class="rz l"></span><div class="fill" style="width:${prog}%"></div><span class="rz r"></span></div>`;
+      } else {
+        mark = `<div class="g-diamond${t.key ? " key" : ""}" data-id="${esc(t.id)}" style="--c:${c};left:${pct(t.start)}%" title="${tip}"></div>`;
+      }
+      g += `<div class="g-row${isRange(t) ? "" : " single"}"><div class="g-label" title="${esc(t.name)}">
+          <span class="g-move"><button type="button" data-act="up" data-id="${esc(t.id)}" ${i === 0 ? "disabled" : ""} aria-label="Move up">▲</button><button type="button" data-act="down" data-id="${esc(t.id)}" ${i === P.timeline.length - 1 ? "disabled" : ""} aria-label="Move down">▼</button></span>
+          <span class="lname" data-id="${esc(t.id)}">${isRange(t) ? "" : '<span class="dot" style="--c:' + c + '">◆</span> '}${esc(t.name)}</span></div>
+        <div class="g-track">${mark}</div></div>`;
     });
-    g += `<div class="g-row g-mrow"><div class="g-label">Events</div><div class="g-track">` +
-      P.milestones.map((m, i) => m.kind === "break" ? "" :
-        `<div class="g-diamond" data-idx="${i}" style="left:${pct(m.date)}%${m.highlight ? ";width:15px;height:15px;top:10px" : ";opacity:.75"}" title="${esc(m.title)} · ${fmt(m.date)}${m.tbc ? " (TBC)" : ""}"></div>`).join("") +
-      `</div></div></div>`;
+    g += `</div>`;
     $("#gantt").innerHTML = g;
 
-    $("#milestones").innerHTML = P.milestones.map((m, i) => {
-      const date = m.end ? `${fmt(m.date, { day: "numeric", month: "short" })} – ${fmt(m.end)}` : fmt(m.date, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
-      return `<li data-idx="${i}" class="kind-${esc(m.kind)}${daysUntil(m.end || m.date) < 0 ? " past" : ""}${m.highlight ? " highlight" : ""}">
-        <span class="date">${date}</span><span class="t">${esc(m.title)}${tbc(m)}</span><span class="rel">${rel(daysUntil(m.date))}</span></li>`;
-    }).join("");
+    $("#milestones").innerHTML = byDate(P.timeline.filter((t) => !isRange(t) || t.category === "break")).map((t) =>
+      `<li data-id="${esc(t.id)}" class="${t.category === "break" ? "kind-break" : ""}${daysUntil(t.end || t.start) < 0 ? " past" : ""}${t.key ? " highlight" : ""}">
+        <span class="date">${itemDates(t, true)}</span><span class="t">${esc(t.name)}${tbc(t)}</span><span class="rel">${rel(daysUntil(t.start))}</span></li>`).join("");
   }
 
   // ---------- Render: work plan ----------
   let filter = store.get("taskFilter") || "all";
-  const openPhases = new Set(P.phases.filter((p) => parse(p.start) <= today && today <= parse(p.end)).map((p) => p.id));
+  const openPhases = new Set(P.timeline.filter((t) => isRange(t) && parse(t.start) <= today && today <= parse(t.end)).map((t) => t.id));
   const match = (t) => filter === "all" || (filter === "open" && t.status !== "done") || (filter === "overdue" && isOverdue(t)) || t.status === filter;
 
   function renderWork() {
@@ -206,13 +217,14 @@
       <div class="progress" aria-hidden="true"><div style="width:${(done / total) * 100}%"></div></div>
       <span class="muted">${P.tasks.filter((t) => t.status === "doing").length} in progress${overdue ? ` · <span style="color:var(--blocked)">${overdue} overdue</span>` : ""}</span>`;
 
-    $("#phases").innerHTML = P.phases.map((p) => {
+    const items = P.timeline.filter((t) => t.category !== "break" && (isRange(t) || tasksOf(t.id).length));
+    $("#phases").innerHTML = items.map((p) => {
       const ts = tasksOf(p.id); const shown = ts.filter(match);
       const prog = Math.round(phaseProgress(p.id) * 100);
-      const active = parse(p.start) <= today && today <= parse(p.end);
-      return `<details class="phase" data-id="${esc(p.id)}" style="--c:${colorOf(p.goal)}" ${openPhases.has(p.id) || filter !== "all" ? "open" : ""}>
+      const active = parse(p.start) <= today && today <= parse(p.end || p.start);
+      return `<details class="phase" data-id="${esc(p.id)}" style="--c:${colorOf(p.category)}" ${openPhases.has(p.id) || filter !== "all" ? "open" : ""}>
         <summary><span class="pname">${esc(p.name)}${active ? ' <span class="pill" style="background:var(--accent-soft);color:var(--accent)">NOW</span>' : ""}<button type="button" class="phase-edit" data-id="${esc(p.id)}">Edit</button></span>
-          <span class="pdates">${fmt(p.start, { day: "numeric", month: "short" })} → ${fmt(p.end)}</span>
+          <span class="pdates">${itemDates(p)}</span>
           <span class="pprog"><span class="progress"><div style="width:${prog}%"></div></span>${ts.filter((t) => t.status === "done").length}/${ts.length}</span></summary>
         ${shown.length ? `<ul class="tasks">${shown.map((t) => `<li class="${esc(t.status)}${isOverdue(t) ? " overdue" : ""}" data-ti="${P.tasks.indexOf(t)}">
           <span class="status ${esc(t.status)}" title="${STATUS_LABEL[t.status] || t.status}${editMode ? " — click to change" : ""}"></span><span class="txt">${esc(t.task)}</span>
@@ -280,8 +292,8 @@
   }
   $("#editToggle").addEventListener("change", (e) => setEdit(e.target.checked));
   $("#undoBtn").addEventListener("click", undo);
-  $("#addPhase").addEventListener("click", () => openPhaseDialog(null));
-  $("#addMilestone").addEventListener("click", () => openMilestoneDialog(null));
+  $("#addItem").addEventListener("click", () => openItemDialog(null));
+  $("#sortBtn").addEventListener("click", () => { change(() => { P.timeline = byDate(P.timeline); }); toast("Sorted by date — Ctrl+Z to undo"); });
   $("#discardBtn").addEventListener("click", () => {
     if (!confirm("Discard all unsaved edits and go back to what plan.js contains?")) return;
     change(() => { P = clone(fileState); });
@@ -305,14 +317,14 @@
     if (!editMode) return;
     const mv = e.target.closest(".g-move button");
     if (mv) {
-      const i = P.phases.findIndex((p) => p.id === mv.dataset.id);
+      const i = P.timeline.findIndex((t) => t.id === mv.dataset.id);
       const j = mv.dataset.act === "up" ? i - 1 : i + 1;
-      if (j < 0 || j >= P.phases.length) return;
-      change(() => { [P.phases[i], P.phases[j]] = [P.phases[j], P.phases[i]]; });
+      if (j < 0 || j >= P.timeline.length) return;
+      change(() => { [P.timeline[i], P.timeline[j]] = [P.timeline[j], P.timeline[i]]; });
       return;
     }
     const nm = e.target.closest(".lname");
-    if (nm) openPhaseDialog(nm.dataset.id);
+    if (nm) openItemDialog(nm.dataset.id);
   });
 
   // Gantt: drag to move / resize
@@ -323,9 +335,9 @@
     if (!el) return;
     e.preventDefault();
     const isMs = el.classList.contains("g-diamond");
-    const item = isMs ? P.milestones[+el.dataset.idx] : P.phases.find((p) => p.id === el.dataset.id);
+    const item = P.timeline.find((t) => t.id === el.dataset.id);
     const mode = e.target.classList.contains("rz") ? (e.target.classList.contains("l") ? "start" : "end") : "move";
-    const o = isMs ? { start: item.date, end: item.end } : { start: item.start, end: item.end };
+    const o = { start: item.start, end: item.end };
     const pxPerDay = el.parentElement.getBoundingClientRect().width / (G.span / DAY);
     const x0 = e.clientX; let moved = false; let ns = o.start; let ne = o.end;
     try { el.setPointerCapture(e.pointerId); } catch (err) {}
@@ -347,11 +359,11 @@
     const onUp = () => {
       el.removeEventListener("pointermove", onMove); el.removeEventListener("pointerup", onUp); el.removeEventListener("pointercancel", onUp);
       el.classList.remove("dragging"); tip.hidden = true;
-      if (!moved) { isMs ? openMilestoneDialog(+el.dataset.idx) : openPhaseDialog(item.id); return; }
+      if (!moved) { openItemDialog(item.id); return; }
       if (ns === o.start && ne === o.end) { render(); return; }
       change(() => {
-        const target = isMs ? P.milestones[+el.dataset.idx] : P.phases.find((p) => p.id === item.id);
-        if (isMs) { target.date = ns; if (target.end) target.end = ne; } else { target.start = ns; target.end = ne; }
+        const target = P.timeline.find((t) => t.id === item.id);
+        target.start = ns; if (target.end) target.end = ne;
       });
     };
     el.addEventListener("pointermove", onMove); el.addEventListener("pointerup", onUp); el.addEventListener("pointercancel", onUp);
@@ -360,20 +372,20 @@
   // Key dates list → edit event
   $("#milestones").addEventListener("click", (e) => {
     const li = e.target.closest("li");
-    if (editMode && li) openMilestoneDialog(+li.dataset.idx);
+    if (editMode && li) openItemDialog(li.dataset.id);
   });
 
   // Work plan: cycle status, open phase dialog
   $("#phases").addEventListener("click", (e) => {
     if (!editMode) return;
     const btn = e.target.closest(".phase-edit");
-    if (btn) { e.preventDefault(); e.stopPropagation(); openPhaseDialog(btn.dataset.id); return; }
+    if (btn) { e.preventDefault(); e.stopPropagation(); openItemDialog(btn.dataset.id); return; }
     const li = e.target.closest(".tasks li");
     if (!li) return;
     const ti = +li.dataset.ti;
     if (e.target.classList.contains("status")) {
       change(() => { const t = P.tasks[ti]; t.status = STATUSES[(STATUSES.indexOf(t.status) + 1) % STATUSES.length]; });
-    } else if (e.target.classList.contains("txt")) openPhaseDialog(P.tasks[ti].phase);
+    } else if (e.target.classList.contains("txt")) openItemDialog(P.tasks[ti].item);
   });
 
   // ---------- Dialogs ----------
@@ -384,99 +396,67 @@
       <input name="task" value="${esc(t.task)}" placeholder="What needs to be done" aria-label="Task">
       <input type="date" name="due" value="${esc(t.due || "")}" aria-label="Due date">
       <button type="button" class="del" title="Delete task" aria-label="Delete task">✕</button></div>`;
-  const nextPhaseId = () => "P" + (Math.max(-1, ...P.phases.map((p) => parseInt(String(p.id).replace(/\D/g, ""), 10)).filter((n) => !isNaN(n))) + 1);
+  const nextId = () => { const ids = new Set(P.timeline.map((t) => t.id)); let n = P.timeline.length; while (ids.has("T" + n)) n++; return "T" + n; };
 
-  function openPhaseDialog(id) {
+  function openItemDialog(id) {
     const isNew = !id;
-    const p = isNew ? { id: nextPhaseId(), name: "", start: TODAY, end: addDays(TODAY, 13), goal: "setup" } : P.phases.find((x) => x.id === id);
-    if (!p) return;
+    const it = isNew ? { id: nextId(), name: "", start: TODAY, end: addDays(TODAY, 13), category: "setup" } : P.timeline.find((t) => t.id === id);
+    if (!it) return;
     const tasks = isNew ? [] : tasksOf(id);
     dlg.innerHTML = `<form class="dlg" id="dlgForm">
-      <h3>${isNew ? "New phase" : "Edit phase"}</h3>
-      <label>Name<input name="name" required value="${esc(p.name)}" placeholder="e.g. Pilot study"></label>
-      <div class="row2"><label>Start<input type="date" name="start" required value="${esc(p.start)}"></label><label>End<input type="date" name="end" required value="${esc(p.end)}"></label></div>
-      <label>Category (colour)<select name="goal">${options(GOAL_LABEL, p.goal)}</select></label>
+      <h3>${isNew ? "New timeline item" : "Edit timeline item"}</h3>
+      <label>Name<input name="name" required value="${esc(it.name)}" placeholder="e.g. Pilot study, or Meeting with expert statistician"></label>
+      <div class="row2"><label>Start<input type="date" name="start" required value="${esc(it.start)}"></label>
+        <label>End <span class="hint">— leave empty for a single date ◆</span><input type="date" name="end" value="${esc(it.end || "")}"></label></div>
+      <label>Category (colour)<select name="category">${options(CAT_LABEL, it.category)}</select></label>
+      <label class="check"><input type="checkbox" name="tbc" ${it.tbc ? "checked" : ""}> Date still to be confirmed (TBC)</label>
+      <label class="check"><input type="checkbox" name="key" ${it.key ? "checked" : ""}> Key date: show a countdown at the top of the page</label>
       <h4>Tasks (${tasks.length})</h4>
       <div class="trows" id="trows">${tasks.map(taskRow).join("")}</div>
       <div><button type="button" id="addTaskRow">+ Add task</button></div>
-      <footer>${isNew ? "" : '<button type="button" class="danger" id="dlgDelete">Delete phase</button>'}<span class="spacer"></span>
-        <button type="button" id="dlgCancel">Cancel</button><button type="submit" class="primary">${isNew ? "Add phase" : "Save"}</button></footer>
+      <footer>${isNew ? "" : '<button type="button" class="danger" id="dlgDelete">Delete</button>'}<span class="spacer"></span>
+        <button type="button" id="dlgCancel">Cancel</button><button type="submit" class="primary">${isNew ? "Add" : "Save"}</button></footer>
     </form>`;
     $("#addTaskRow").onclick = () => { $("#trows").insertAdjacentHTML("beforeend", taskRow({ task: "", status: "todo", due: "" })); $("#trows").lastElementChild.querySelector("[name=task]").focus(); };
     $("#trows").onclick = (e) => { const d = e.target.closest(".del"); if (d) d.closest(".trow").remove(); };
     $("#dlgCancel").onclick = () => dlg.close();
     if (!isNew) $("#dlgDelete").onclick = () => {
-      if (!confirm(`Delete "${p.name}"${tasks.length ? ` and its ${tasks.length} task(s)` : ""}?`)) return;
+      if (!confirm(`Delete "${it.name}"${tasks.length ? ` and its ${tasks.length} task(s)` : ""}?`)) return;
       dlg.close();
-      change(() => { P.phases = P.phases.filter((x) => x.id !== id); P.tasks = P.tasks.filter((t) => t.phase !== id); });
-      toast("Phase deleted — Ctrl+Z to undo");
+      change(() => { P.timeline = P.timeline.filter((t) => t.id !== id); P.tasks = P.tasks.filter((t) => t.item !== id); });
+      toast("Deleted — Ctrl+Z to undo");
     };
     $("#dlgForm").onsubmit = (e) => {
       e.preventDefault();
       const f = new FormData(e.target);
-      let s = f.get("start"), en = f.get("end");
-      if (en < s) [s, en] = [en, s];
+      let s = f.get("start"), en = f.get("end") || "";
+      if (en && en < s) [s, en] = [en, s];
+      const out = { id: it.id, name: f.get("name").trim(), start: s };
+      if (en && en !== s) out.end = en;
+      out.category = f.get("category");
+      if (f.has("tbc")) out.tbc = true;
+      if (f.has("key")) out.key = true;
       const newTasks = $$("#trows .trow").map((r) => ({
-        phase: p.id,
+        item: it.id,
         task: r.querySelector("[name=task]").value.trim(),
         due: r.querySelector("[name=due]").value || undefined,
         status: r.querySelector("[name=status]").value
       })).filter((t) => t.task);
       dlg.close();
       change(() => {
-        const target = isNew ? p : P.phases.find((x) => x.id === id);
-        Object.assign(target, { name: f.get("name").trim(), start: s, end: en, goal: f.get("goal") });
-        if (isNew) P.phases.push(target);
-        const at = P.tasks.findIndex((t) => t.phase === p.id);
-        const rest = P.tasks.filter((t) => t.phase !== p.id);
+        if (isNew) {
+          const at = P.timeline.findIndex((t) => t.start > out.start);   // insert in date order
+          P.timeline.splice(at < 0 ? P.timeline.length : at, 0, out);
+        } else P.timeline[P.timeline.findIndex((t) => t.id === id)] = out;
+        const at = P.tasks.findIndex((t) => t.item === it.id);
+        const rest = P.tasks.filter((t) => t.item !== it.id);
         rest.splice(at < 0 ? rest.length : at, 0, ...newTasks);
         P.tasks = rest;
-        openPhases.add(p.id);
+        openPhases.add(it.id);
       });
     };
     dlg.showModal();
     if (isNew) dlg.querySelector("[name=name]").focus();
-  }
-
-  function openMilestoneDialog(idx) {
-    const isNew = idx === null;
-    const m = isNew ? { date: TODAY, title: "", kind: "milestone" } : P.milestones[idx];
-    if (!m) return;
-    dlg.innerHTML = `<form class="dlg" id="dlgForm">
-      <h3>${isNew ? "New event" : "Edit event"}</h3>
-      <label>Title<input name="title" required value="${esc(m.title)}" placeholder="e.g. Meeting with expert statistician"></label>
-      <div class="row2"><label>Date<input type="date" name="date" required value="${esc(m.date)}"></label>
-        <label>Until (optional, for periods)<input type="date" name="end" value="${esc(m.end || "")}"></label></div>
-      <label>Type<select name="kind">${options(KIND_LABEL, m.kind)}</select></label>
-      <label class="check"><input type="checkbox" name="tbc" ${m.tbc ? "checked" : ""}> Date still to be confirmed (TBC)</label>
-      <label class="check"><input type="checkbox" name="highlight" ${m.highlight ? "checked" : ""}> Key date: show a countdown at the top</label>
-      <footer>${isNew ? "" : '<button type="button" class="danger" id="dlgDelete">Delete event</button>'}<span class="spacer"></span>
-        <button type="button" id="dlgCancel">Cancel</button><button type="submit" class="primary">${isNew ? "Add event" : "Save"}</button></footer>
-    </form>`;
-    $("#dlgCancel").onclick = () => dlg.close();
-    if (!isNew) $("#dlgDelete").onclick = () => {
-      if (!confirm(`Delete "${m.title}"?`)) return;
-      dlg.close();
-      change(() => { P.milestones.splice(idx, 1); });
-      toast("Event deleted — Ctrl+Z to undo");
-    };
-    $("#dlgForm").onsubmit = (e) => {
-      e.preventDefault();
-      const f = new FormData(e.target);
-      let d = f.get("date"), en = f.get("end") || undefined;
-      if (en && en < d) [d, en] = [en, d];
-      const kind = f.get("kind");
-      const upd = { date: d, end: en, title: f.get("title").trim(), kind, tbc: f.has("tbc") || undefined, highlight: f.has("highlight") || undefined };
-      dlg.close();
-      change(() => {
-        const out = {};
-        ["date", "end", "title", "kind", "tbc", "highlight"].forEach((k) => { if (upd[k] !== undefined) out[k] = upd[k]; });
-        if (out.kind === "break" && !out.end) out.end = out.date;
-        if (isNew) P.milestones.push(out); else P.milestones[idx] = out;
-      });
-    };
-    dlg.showModal();
-    if (isNew) dlg.querySelector("[name=title]").focus();
   }
 
   // ---------- Saving ----------
