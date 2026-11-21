@@ -1,0 +1,500 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prompt Playground</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.8/purify.min.js"></script>
+  <style>
+    :root {
+      --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #677085;
+      --border: #dfe3ea; --accent: #2f5bd3; --accent-text: #ffffff;
+      --code-bg: #f1f3f7; --error: #b3261e; --error-bg: #fdecea;
+      --warn: #7a4b00; --warn-bg: #fff4dc;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #14161b; --panel: #1c1f26; --text: #e6e8ee; --muted: #9aa2b4;
+        --border: #2d323d; --accent: #7d9bff; --accent-text: #0e1220;
+        --code-bg: #232733; --error: #ffb4ab; --error-bg: #3a1d1b;
+        --warn: #ffd58a; --warn-bg: #3a2e14;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 24px 16px 48px; }
+    header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+    h1 { font-size: 22px; margin: 0; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+    @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+    label { display: block; font-weight: 600; font-size: 13px; margin: 0 0 6px; }
+    textarea, input, select {
+      width: 100%; font: inherit; color: var(--text); background: var(--bg);
+      border: 1px solid var(--border); border-radius: 8px; padding: 10px;
+    }
+    textarea { resize: vertical; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13.5px; }
+    #system { min-height: 90px; }
+    #prompt { min-height: 260px; }
+    .field { margin-bottom: 14px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+    .row > .field { flex: 1 1 160px; }
+    .check { display: flex; align-items: center; gap: 8px; font-weight: 500; margin-bottom: 14px; }
+    .check input { width: auto; }
+    button {
+      font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 10px 18px;
+      background: var(--accent); color: var(--accent-text); cursor: pointer;
+    }
+    button:disabled { opacity: .6; cursor: progress; }
+    button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--border); padding: 6px 12px; font-size: 13px; }
+    h2 { font-size: 15px; margin: 0 0 8px; }
+    pre {
+      white-space: pre-wrap; word-wrap: break-word; margin: 0; background: var(--code-bg);
+      border-radius: 8px; padding: 12px; font: 13.5px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
+      min-height: 48px;
+    }
+    .section { margin-bottom: 16px; }
+    .stats { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+    .stats b { color: var(--text); font-weight: 600; }
+    .error { background: var(--error-bg); color: var(--error); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
+    .hidden { display: none; }
+    details { border-top: 1px solid var(--border); padding: 10px 0; }
+    .item { display: flex; gap: 10px; align-items: flex-start; border-top: 1px solid var(--border); padding: 10px 0; }
+    .item > details { flex: 1; min-width: 0; border: 0; padding: 0; }
+    .item > .pick { width: auto; margin-top: 5px; flex: none; cursor: pointer; }
+    .copybar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 8px; font-size: 13px; }
+    .copybar .check { margin: 0; font-weight: 500; color: var(--muted); }
+    .head .actions { display: flex; align-items: center; gap: 12px; }
+    summary { cursor: pointer; font-size: 13.5px; }
+    summary .muted { margin-left: 6px; }
+    .history-body { margin-top: 8px; display: grid; gap: 8px; }
+    .history-body .actions { display: flex; gap: 8px; }
+    .warn { background: var(--warn-bg); color: var(--warn); border-radius: 8px; padding: 8px 12px; font-size: 13px; margin: -6px 0 14px; }
+    .web { font-size: 13.5px; }
+    .web ul { margin: 4px 0 10px; padding-left: 1.3em; }
+    .web li { margin: 2px 0; overflow-wrap: anywhere; }
+    .web a { color: var(--accent); }
+    .case { font-weight: 600; }
+    /* Read-only export (export_playground.py): no prompt form, results full width */
+    body.export #form { display: none; }
+    body.export .grid { grid-template-columns: 1fr; }
+    .runtime { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .history-tools { margin-bottom: 8px; }
+    .history-tools input { max-width: 360px; padding: 6px 10px; font-size: 13.5px; }
+    .badge { display: inline-block; font-size: 11px; font-weight: 600; border-radius: 4px; padding: 0 6px; margin-left: 6px; background: var(--warn-bg); color: var(--warn); }
+    .head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .head .check { margin: 0; font-size: 13px; color: var(--muted); }
+
+    /* Rendered Markdown + math */
+    .md { background: var(--code-bg); border-radius: 8px; padding: 4px 16px; min-height: 48px; line-height: 1.6; overflow-wrap: break-word; }
+    .md.raw { white-space: pre-wrap; padding: 12px; font: 13.5px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .md h1, .md h2, .md h3, .md h4 { margin: 1.1em 0 .4em; line-height: 1.3; }
+    .md h1 { font-size: 1.3em; } .md h2 { font-size: 1.18em; } .md h3 { font-size: 1.06em; } .md h4 { font-size: 1em; }
+    .md p, .md ul, .md ol, .md blockquote { margin: .6em 0; }
+    .md ul, .md ol { padding-left: 1.4em; }
+    .md li { margin: .2em 0; }
+    .md code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .92em; background: var(--panel); border-radius: 4px; padding: 1px 4px; }
+    .md pre { background: var(--panel); border: 1px solid var(--border); overflow-x: auto; white-space: pre; }
+    .md pre code { background: none; padding: 0; }
+    .md table { border-collapse: collapse; display: block; overflow-x: auto; margin: .8em 0; font-size: .95em; }
+    .md th, .md td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; vertical-align: top; }
+    .md th { background: var(--panel); }
+    .md blockquote { border-left: 3px solid var(--border); padding-left: 12px; color: var(--muted); }
+    .md hr { border: 0; border-top: 1px solid var(--border); margin: 1.2em 0; }
+    .md .katex-display { overflow-x: auto; overflow-y: hidden; padding: 4px 0; margin: .8em 0; }
+    .md .katex { font-size: 1.08em; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Prompt Playground</h1>
+    <span class="muted">Total spent: <b id="total">–</b> · every call is logged to code/logs/openai_calls.jsonl</span>
+  </header>
+
+  <div class="grid">
+    <form class="panel" id="form">
+      <div class="field">
+        <label for="name">Case name (optional)</label>
+        <input id="name" list="nameList" autocomplete="off" placeholder="e.g. simple prompt, simple prompt + web search, prompt with leveraged knowledge">
+        <datalist id="nameList"></datalist>
+      </div>
+      <div class="field">
+        <label for="system">System instructions (optional)</label>
+        <textarea id="system" placeholder="e.g. You are an expert oncologist helping to elicit a prior distribution…"></textarea>
+      </div>
+      <div class="field">
+        <label for="prompt">Prompt</label>
+        <textarea id="prompt" placeholder="Type your prompt here… (Ctrl+Enter to send)" required></textarea>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="model">Model</label>
+          <select id="modelSelect"></select>
+          <input id="model" class="hidden" autocomplete="off" placeholder="Model name, e.g. gpt-4o-2024-08-06" style="margin-top:6px">
+        </div>
+        <div class="field">
+          <label for="effort">Reasoning effort</label>
+          <select id="effort">
+            <option value="">Model default</option>
+            <option value="none">none</option>
+            <option value="minimal">minimal</option>
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high">high</option>
+            <option value="xhigh">xhigh</option>
+          </select>
+        </div>
+        <div class="field" id="tempField">
+          <label for="temperature">Temperature (blank = default)</label>
+          <input id="temperature" type="number" min="0" max="2" step="0.1" placeholder="not for gpt-5 models">
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" id="reasoning" checked> Show reasoning summary (reasoning models only)</label>
+      <label class="check"><input type="checkbox" id="webSearch"> Web search</label>
+      <p class="warn hidden" id="webWarn">Web search is on. The model can find published trial results, which leaks them into the prior.
+        Each search costs $0.01, included in the cost shown. Queries and sources are logged.</p>
+      <button type="submit" id="send">Send</button>
+      <span class="muted" id="status"></span>
+    </form>
+
+    <div class="panel">
+      <div class="error hidden" id="error"></div>
+      <div class="section">
+        <div class="head">
+          <h2>Answer</h2>
+          <div class="actions">
+            <label class="check"><input type="checkbox" id="raw"> Show raw text</label>
+            <button type="button" class="ghost" id="copyAnswer">Copy</button>
+          </div>
+        </div>
+        <div class="md" id="answer"><p class="muted">The output will appear here.</p></div>
+      </div>
+      <div class="section hidden" id="reasoningBox">
+        <h2>Reasoning (summary)</h2>
+        <div class="md" id="reasoningText"></div>
+      </div>
+      <div class="section hidden" id="webBox">
+        <h2>Web search</h2>
+        <div id="webText"></div>
+      </div>
+      <div class="stats" id="stats"></div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:20px">
+    <h2>Recent calls</h2>
+    <div class="history-tools">
+      <input id="filter" list="nameList" autocomplete="off" placeholder="Filter by case name… (searches the whole log)">
+    </div>
+    <div class="copybar">
+      <button type="button" class="ghost" id="selectShown">Select all shown</button>
+      <button type="button" id="copySelected" disabled>Copy selected (0)</button>
+      <button type="button" class="ghost" id="clearSelected">Clear selection</button>
+      <label class="check"><input type="checkbox" id="incPrompt" checked> include prompts</label>
+      <label class="check"><input type="checkbox" id="incReasoning"> include reasoning</label>
+      <label class="check"><input type="checkbox" id="incSources"> include web sources</label>
+    </div>
+    <div id="history"><span class="muted">Loading…</span></div>
+  </div>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const money = (x) => x == null ? "n/a" : "$" + Number(x).toFixed(x < 0.01 ? 6 : 4);
+  const effortOf = (c) => {
+    const used = c.reasoning_effort || c.reasoning_effort_requested;
+    if (!used) return c.reasoning_effort_requested === undefined ? "not logged" : "n/a";
+    return c.reasoning_effort_requested ? used : `${used} (default)`;
+  };
+  const secs = (x) => x == null ? "n/a" : Number(x).toFixed(1) + " s";
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  // Keep the last-used inputs between page reloads.
+  const saved = (() => { try { return JSON.parse(localStorage.getItem("playground") || "{}"); } catch { return {}; } })();
+  function save() {
+    try {
+      localStorage.setItem("playground", JSON.stringify({
+        name: $("name").value, system: $("system").value, prompt: $("prompt").value, model: $("model").value,
+        temperature: $("temperature").value, effort: $("effort").value, reasoning: $("reasoning").checked, webSearch: $("webSearch").checked,
+      }));
+    } catch {}
+  }
+
+  // The dropdown lists known models; "Other…" reveals a text box for any other model name.
+  // #model always holds the model that will be sent.
+  function setModel(name) {
+    const known = [...$("modelSelect").options].some((o) => o.value === name);
+    $("modelSelect").value = known ? name : "__other";
+    $("model").value = name;
+    $("model").classList.toggle("hidden", known);
+  }
+  $("modelSelect").addEventListener("change", () => {
+    const other = $("modelSelect").value === "__other";
+    $("model").classList.toggle("hidden", !other);
+    $("model").value = other ? "" : $("modelSelect").value;
+    if (other) $("model").focus();
+    save();
+  });
+
+  function syncTemp() { $("tempField").style.opacity = $("reasoning").checked ? 0.4 : 1; $("temperature").disabled = $("reasoning").checked; }
+
+  async function init() {
+    const info = await fetch("/api/info").then((r) => r.json());
+    $("modelSelect").innerHTML =
+      info.models.map((m) => `<option value="${esc(m)}">${esc(m)}${m === info.default_model ? " (default)" : ""}</option>`).join("") +
+      '<option value="__other">Other…</option>';
+    setModel(saved.model || info.default_model);
+    $("name").value = saved.name || "";
+    $("system").value = saved.system || "";
+    $("prompt").value = saved.prompt || "";
+    $("temperature").value = saved.temperature || "";
+    $("effort").value = saved.effort || "";
+    $("reasoning").checked = saved.reasoning ?? true;
+    $("webSearch").checked = saved.webSearch ?? false;
+    syncWeb();
+    $("total").textContent = money(info.total_cost);
+    if (window.EXPORT) {
+      document.body.classList.add("export");
+      document.querySelector("header .muted").textContent = window.EXPORT.note;
+      $("answer").innerHTML = '<p class="muted">Click “Show here” on a call below to view it in this panel.</p>';
+    }
+    syncTemp();
+    loadHistory();
+  }
+
+  function syncWeb() { $("webWarn").classList.toggle("hidden", !$("webSearch").checked); }
+  $("webSearch").addEventListener("change", () => { syncWeb(); save(); });
+
+  // Queries, cited sources and all consulted pages of a logged call, as HTML ("" if search was off).
+  function webHtml(call) {
+    if (!call || !call.web_search) return "";
+    const link = (url, title) => `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(title || url)}</a>`;
+    const list = (items) => items.length ? `<ul>${items.map((x) => `<li>${x}</li>`).join("")}</ul>` : '<p class="muted">None.</p>';
+    const queries = call.web_search_queries || [], cited = call.web_sources_cited || [], seen = call.web_sources_consulted || [];
+    return `<div class="web">
+      <label>Searched for (${queries.length})</label>${list(queries.map(esc))}
+      <label>Cited in the answer (${cited.length})</label>${list(cited.map((s) => link(s.url, s.title)))}
+      <details><summary>All pages consulted (${seen.length})</summary>${list(seen.map((u) => link(u)))}</details>
+    </div>`;
+  }
+
+  function showStats(call) {
+    if (!call) { $("stats").innerHTML = ""; return; }
+    const items = [
+      ["Model", call.model_returned],
+      ["Effort", effortOf(call)],
+      ["Input tokens", call.input_tokens],
+      ["Output tokens", call.output_tokens],
+      ["Reasoning tokens", call.reasoning_tokens],
+      ["Cost", money(call.cost_usd)],
+      ...(call.web_search ? [["Searches", `${call.web_search_calls ?? "?"} (${money(call.web_search_cost_usd)} of the cost)`]] : []),
+      ["Time", call.seconds + " s"],
+    ];
+    $("stats").innerHTML = items.map(([k, v]) => `<span>${k}: <b>${esc(v)}</b></span>`).join("");
+    if (call.total_cost_usd != null) $("total").textContent = money(call.total_cost_usd);
+  }
+
+  // ---- Markdown + LaTeX rendering ----
+  // Math is cut out before Markdown runs (Markdown would eat the backslashes in \( \) and \[ \]),
+  // then rendered with KaTeX and put back. Code spans are protected so math inside code stays literal.
+  const MATH = /\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|(?<![\\$\w])\$(?![\s\d])[^$\n]+?(?<!\s)\$(?!\w)/g;
+  const CODE = /```[\s\S]*?```|`[^`\n]+`/g;
+
+  function renderMarkdown(text) {
+    if (!window.marked || !window.katex || !window.DOMPurify) return null;  // CDN not reachable
+    const code = [];
+    let src = text.replace(CODE, (m) => `\u0000C${code.push(m) - 1}\u0000`);
+    const math = [];
+    src = src.replace(MATH, (m) => {
+      const display = m.startsWith("$$") || m.startsWith("\\[");
+      const tex = display ? m.slice(2, -2) : m.startsWith("$") ? m.slice(1, -1) : m.slice(2, -2);
+      return `KATEXMATH${math.push({ tex, display }) - 1}END`;
+    });
+    src = src.replace(/\u0000C(\d+)\u0000/g, (_, i) => code[i]);
+    let html = DOMPurify.sanitize(marked.parse(src, { gfm: true, breaks: false }));
+    return html.replace(/KATEXMATH(\d+)END/g, (_, i) =>
+      katex.renderToString(math[i].tex, { displayMode: math[i].display, throwOnError: false }));
+  }
+
+  const sources = new WeakMap();
+  function draw(el) {
+    const text = sources.get(el) ?? "";
+    const html = $("raw").checked ? null : renderMarkdown(text);
+    el.classList.toggle("raw", html === null);
+    if (html === null) el.textContent = text; else el.innerHTML = html;
+  }
+  function paint(el, text) { sources.set(el, text); draw(el); }
+  $("raw").addEventListener("change", () => document.querySelectorAll(".md").forEach((el) => sources.has(el) && draw(el)));
+
+  function showResult(answer, reasoning, call) {
+    paint($("answer"), answer || "(empty answer)");
+    paint($("reasoningText"), reasoning || "");
+    $("reasoningBox").classList.toggle("hidden", !reasoning);
+    $("webText").innerHTML = webHtml(call);
+    $("webBox").classList.toggle("hidden", !(call && call.web_search));
+    showStats(call);
+  }
+
+  $("form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    save();
+    $("error").classList.add("hidden");
+    $("send").disabled = true;
+    const started = Date.now();
+    const timer = setInterval(() => { $("status").textContent = `  Waiting… ${((Date.now() - started) / 1000).toFixed(0)} s`; }, 250);
+    try {
+      const temp = $("temperature").value.trim();
+      const res = await fetch("/api/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: $("name").value, system: $("system").value, prompt: $("prompt").value, model: $("model").value,
+          reasoning: $("reasoning").checked, temperature: temp === "" ? null : Number(temp),
+          web_search: $("webSearch").checked, effort: $("effort").value,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      showResult(data.answer, data.reasoning, data.call);
+      loadHistory();
+    } catch (err) {
+      $("error").textContent = err.message;
+      $("error").classList.remove("hidden");
+    } finally {
+      clearInterval(timer);
+      $("status").textContent = "";
+      $("send").disabled = false;
+    }
+  });
+
+  $("prompt").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) $("form").requestSubmit(); });
+  $("reasoning").addEventListener("change", () => { syncTemp(); save(); });
+  ["name", "system", "prompt", "model", "temperature"].forEach((id) => $(id).addEventListener("input", save));
+  $("effort").addEventListener("change", save);
+
+  let history = [];
+  // Case names seen so far, offered as suggestions in the name and filter boxes.
+  const knownNames = new Set();
+  function addNames(calls) {
+    calls.forEach((c) => c.name && knownNames.add(c.name));
+    $("nameList").innerHTML = [...knownNames].sort().map((n) => `<option value="${esc(n)}">`).join("");
+  }
+  const snippet = (c, n) => esc((c.prompt || "").slice(0, n)) + ((c.prompt || "").length > n ? "…" : "");
+
+  async function loadHistory() {
+    const q = $("filter").value.trim();
+    history = (await fetch("/api/history?q=" + encodeURIComponent(q)).then((r) => r.json())).calls;
+    addNames(history);
+    if (!history.length) { $("history").innerHTML = `<span class="muted">${q ? "No calls with that case name." : "No calls yet."}</span>`; return; }
+    $("history").innerHTML = history.map((c, i) => `
+      <div class="item">
+      <input type="checkbox" class="pick" data-pick="${i}" title="Select for copying" ${selected.has(keyOf(c)) ? "checked" : ""}>
+      <details>
+        <summary>${c.name ? `<span class="case">${esc(c.name)}</span> <span class="muted">— ${snippet(c, 70)}</span>` : snippet(c, 110)}
+          <span class="muted">${esc(new Date(c.timestamp).toLocaleString())} · ${esc(c.model_returned || c.model_requested)} · ${money(c.cost_usd)} · effort ${esc(effortOf(c))} · <b class="runtime">${secs(c.seconds)}</b></span>${c.web_search ? '<span class="badge">web search</span>' : ""}
+        </summary>
+        <div class="history-body">
+          ${c.system ? `<div><label>System</label><pre>${esc(c.system)}</pre></div>` : ""}
+          <div><label>Prompt</label><pre>${esc(c.prompt)}</pre></div>
+          ${c.reasoning_summary ? `<div><label>Reasoning (summary)</label><div class="md" data-h="${i}" data-f="reasoning_summary"></div></div>` : ""}
+          <div><label>Answer</label><div class="md" data-h="${i}" data-f="answer"></div></div>
+          ${c.web_search ? `<div>${webHtml(c)}</div>` : ""}
+          <div class="actions">
+            <button type="button" class="ghost" data-reuse="${i}">${window.EXPORT ? "Show here" : "Load into editor"}</button>
+            <button type="button" class="ghost" data-copy="${i}">Copy answer</button>
+          </div>
+        </div>
+      </details>
+      </div>`).join("");
+    $("history").querySelectorAll("[data-h]").forEach((el) => paint(el, history[el.dataset.h][el.dataset.f]));
+  }
+
+  // ---- Copying ----
+  async function copyText(text, btn) {
+    try { await navigator.clipboard.writeText(text); }
+    catch {  // older browsers / non-secure contexts
+      const t = document.createElement("textarea");
+      t.value = text; document.body.append(t); t.select(); document.execCommand("copy"); t.remove();
+    }
+    if (btn) { const old = btn.textContent; btn.textContent = "Copied!"; setTimeout(() => { btn.textContent = old; }, 1200); }
+  }
+
+  // One call as Markdown: name, settings line, then prompt / reasoning / answer / sources per the options.
+  function callMarkdown(c) {
+    const parts = [`## ${c.name || "(unnamed call)"}`,
+      `_${new Date(c.timestamp).toLocaleString()} · ${c.model_returned || c.model_requested}${c.web_search ? " · web search" : ""} · effort ${effortOf(c)} · ${money(c.cost_usd)} · ${secs(c.seconds)}_`];
+    if ($("incPrompt").checked) {
+      if (c.system) parts.push(`**System**\n\n${c.system}`);
+      parts.push(`**Prompt**\n\n${c.prompt || ""}`);
+    }
+    if ($("incReasoning").checked && c.reasoning_summary) parts.push(`**Reasoning (summary)**\n\n${c.reasoning_summary}`);
+    parts.push(`**Answer**\n\n${c.answer || "(empty answer)"}`);
+    if ($("incSources").checked && c.web_search) {
+      const cited = c.web_sources_cited || [];
+      parts.push(`**Cited sources**\n\n${cited.length ? cited.map((s) => `- [${s.title || s.url}](${s.url})`).join("\n") : "None."}`);
+    }
+    return parts.join("\n\n");
+  }
+
+  // Selected calls, kept across filter changes and reloads, keyed by response id.
+  const selected = new Map();
+  const keyOf = (c) => c.response_id || c.timestamp;
+  function syncSelected() {
+    $("copySelected").textContent = `Copy selected (${selected.size})`;
+    $("copySelected").disabled = selected.size === 0;
+  }
+  $("history").addEventListener("change", (e) => {
+    const i = e.target.dataset.pick;
+    if (i === undefined) return;
+    const c = history[i];
+    if (e.target.checked) selected.set(keyOf(c), c); else selected.delete(keyOf(c));
+    syncSelected();
+  });
+  $("selectShown").addEventListener("click", () => {
+    history.forEach((c) => selected.set(keyOf(c), c));
+    $("history").querySelectorAll(".pick").forEach((el) => { el.checked = true; });
+    syncSelected();
+  });
+  $("clearSelected").addEventListener("click", () => {
+    selected.clear();
+    $("history").querySelectorAll(".pick").forEach((el) => { el.checked = false; });
+    syncSelected();
+  });
+  $("copySelected").addEventListener("click", (e) => {
+    const calls = [...selected.values()].sort((a, b) => a.timestamp.localeCompare(b.timestamp));  // oldest first
+    copyText(calls.map(callMarkdown).join("\n\n---\n\n") + "\n", e.target);
+  });
+  $("copyAnswer").addEventListener("click", (e) => copyText(sources.get($("answer")) ?? "", e.target));
+
+  $("history").addEventListener("click", (e) => {
+    if (e.target.dataset.copy !== undefined) return copyText(history[e.target.dataset.copy].answer || "", e.target);
+    const i = e.target.dataset.reuse;
+    if (i === undefined) return;
+    const c = history[i];
+    $("name").value = c.name || "";
+    $("system").value = c.system || "";
+    $("prompt").value = c.prompt || "";
+    setModel(c.model_requested || $("model").value);
+    $("effort").value = c.reasoning_effort_requested || "";
+    $("webSearch").checked = !!c.web_search;
+    syncWeb();
+    showResult(c.answer, c.reasoning_summary, c);
+    save();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+
+  let filterTimer;
+  $("filter").addEventListener("input", () => { clearTimeout(filterTimer); filterTimer = setTimeout(loadHistory, 250); });
+
+  init().catch((err) => { $("error").textContent = "Could not reach the server: " + err.message; $("error").classList.remove("hidden"); });
+</script>
+</body>
+</html>

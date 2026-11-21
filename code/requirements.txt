@@ -1,1 +1,4 @@
 openai>=1.66
+numpy
+scipy
+matplotlib

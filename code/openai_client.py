@@ -82,6 +82,10 @@ PRICES = {
     "o3": (2.00, 0.50, 8.00),
 }
 
+# USD per web_search tool call ($10 per 1,000 calls, all models). The search content it pulls in
+# is already counted in the call's input tokens, which PRICES covers.
+WEB_SEARCH_PRICE = 0.01
+
 _client = None
 
 
@@ -100,7 +104,10 @@ def ask(
     system: str | None = None,
     model: str = DEFAULT_MODEL,
     temperature: float | None = None,
+    web_search: bool = False,
     log: bool = True,
+    name: str | None = None,
+    effort: str | None = None,
 ) -> str:
     """Send a prompt to an OpenAI model and return its text answer.
 
@@ -110,12 +117,20 @@ def ask(
         model: Model name, e.g. "gpt-5-mini" or "gpt-4.1". Defaults to $OPENAI_MODEL.
         temperature: Sampling temperature. Leave as None for reasoning models
             (e.g. the gpt-5 family), which do not accept it.
+        web_search: Let the model search the web (OpenAI's built-in web_search tool).
+            Off by default: searching can leak published trial results into an elicited
+            prior. Queries and sources are logged; each search adds WEB_SEARCH_PRICE to the cost.
         log: Append the call (prompt, settings, answer, tokens, cost, timing) to logs/openai_calls.jsonl.
+        name: Optional case name saved with the logged call (e.g. "simple prompt + web search"),
+            so runs are easy to find when reviewing the log.
+        effort: Reasoning effort, e.g. "none", "minimal", "low", "medium", "high", "xhigh".
+            None leaves it to the model's default. Which values are accepted depends on the
+            model; the effort actually used is logged as reasoning_effort.
 
     Returns:
         The model's answer as a string.
     """
-    return _call(prompt, system, model, temperature, None, log)[0]
+    return _call(prompt, system, model, temperature, None, web_search, log, name, effort)[0]
 
 
 def ask_with_reasoning(
@@ -123,7 +138,10 @@ def ask_with_reasoning(
     system: str | None = None,
     model: str = DEFAULT_MODEL,
     summary: str = "auto",
+    web_search: bool = False,
     log: bool = True,
+    name: str | None = None,
+    effort: str | None = None,
 ) -> tuple[str, str]:
     """Like ask(), but also return a summary of the model's reasoning.
 
@@ -132,21 +150,30 @@ def ask_with_reasoning(
 
     Args:
         summary: "auto", "concise" or "detailed".
+        web_search, name, effort: See ask().
 
     Returns:
         (answer, reasoning_summary). The summary is "" if the model returned none.
     """
-    return _call(prompt, system, model, None, summary, log)
+    return _call(prompt, system, model, None, summary, web_search, log, name, effort)
 
 
-def _call(prompt, system, model, temperature, summary, log) -> tuple[str, str]:
+def _call(prompt, system, model, temperature, summary, web_search, log, name=None, effort=None) -> tuple[str, str]:
     params = {"model": model, "input": prompt}
     if system:
         params["instructions"] = system
     if temperature is not None:
         params["temperature"] = temperature
+    reasoning_params = {}
     if summary:
-        params["reasoning"] = {"summary": summary}
+        reasoning_params["summary"] = summary
+    if effort:
+        reasoning_params["effort"] = effort
+    if reasoning_params:
+        params["reasoning"] = reasoning_params
+    if web_search:
+        params["tools"] = [{"type": "web_search"}]
+        params["include"] = ["web_search_call.action.sources"]  # every page consulted, not only cited ones
 
     start = time.perf_counter()
     response = get_client().responses.create(**params)
@@ -159,7 +186,7 @@ def _call(prompt, system, model, temperature, summary, log) -> tuple[str, str]:
     )
 
     if log:
-        _log_call(params, response, answer, reasoning, time.perf_counter() - start)
+        _log_call(params, response, answer, reasoning, time.perf_counter() - start, name)
     return answer, reasoning
 
 
@@ -190,7 +217,33 @@ def total_cost(log_file: Path | None = None) -> float:
     return total
 
 
-def _log_call(params: dict, response, answer: str, reasoning: str, seconds: float) -> None:
+def web_search_details(response) -> dict:
+    """What the model searched for and which pages it consulted and cited."""
+    queries, consulted, cited, calls = [], [], {}, 0
+    for item in response.output:
+        kind = getattr(item, "type", None)
+        if kind == "web_search_call":
+            calls += 1
+            action = getattr(item, "action", None)
+            if getattr(action, "query", None):
+                queries.append(action.query)
+            if getattr(action, "url", None):  # the model opened a page directly
+                consulted.append(action.url)
+            consulted += [s.url for s in (getattr(action, "sources", None) or []) if getattr(s, "url", None)]
+        elif kind == "message":
+            for part in getattr(item, "content", None) or []:
+                for a in getattr(part, "annotations", None) or []:
+                    if getattr(a, "type", None) == "url_citation":
+                        cited.setdefault(a.url, getattr(a, "title", None))
+    return {
+        "web_search_calls": calls,
+        "web_search_queries": queries,
+        "web_sources_consulted": list(dict.fromkeys(consulted)),
+        "web_sources_cited": [{"url": u, "title": t} for u, t in cited.items()],
+    }
+
+
+def _log_call(params: dict, response, answer: str, reasoning: str, seconds: float, name: str | None = None) -> None:
     """Write one JSON line per call so every prior can be traced back to its prompt."""
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     usage = getattr(response, "usage", None)
@@ -202,21 +255,31 @@ def _log_call(params: dict, response, answer: str, reasoning: str, seconds: floa
     cost = call_cost(model, input_tokens, cached_tokens, output_tokens)
     if cost is None:
         print(f"[openai_client] No price for model '{model}'; add it to PRICES to track cost.", file=sys.stderr)
+    web = web_search_details(response) if "tools" in params else {}
+    search_cost = web.get("web_search_calls", 0) * WEB_SEARCH_PRICE
+    if search_cost:
+        cost = (cost or 0.0) + search_cost  # without a token price, this is the search fee alone
     record = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        "name": (name or "").strip() or None,
         "model_requested": params["model"],
         "model_returned": getattr(response, "model", None),  # exact snapshot used
         "response_id": getattr(response, "id", None),
         "temperature": params.get("temperature"),
+        "reasoning_effort_requested": params.get("reasoning", {}).get("effort"),  # None = model default
+        "reasoning_effort": getattr(getattr(response, "reasoning", None), "effort", None),  # as reported by the API
         "system": params.get("instructions"),
         "prompt": params["input"],
         "answer": answer,
         "reasoning_summary": reasoning or None,
+        "web_search": "tools" in params,
+        **web,
+        **({"web_search_cost_usd": round(search_cost, 6)} if web else {}),
         "input_tokens": input_tokens,
         "cached_input_tokens": cached_tokens,
         "output_tokens": output_tokens,
         "reasoning_tokens": reasoning_tokens,
-        "cost_usd": round(cost, 6) if cost is not None else None,
+        "cost_usd": round(cost, 6) if cost is not None else None,  # tokens + search fees
         "total_cost_usd": round(total_cost() + (cost or 0.0), 6),
         "seconds": round(seconds, 2),
     }
