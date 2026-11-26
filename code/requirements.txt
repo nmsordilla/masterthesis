@@ -1,4 +1,7 @@
 openai>=1.66
+anthropic>=1.0
+pymupdf4llm
 numpy
 scipy
 matplotlib
+google-genai>=3.0

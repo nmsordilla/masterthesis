@@ -20,6 +20,7 @@ from datetime import datetime
 from pathlib import Path
 
 from openai_client import LOG_FILE
+from playground import load_trials
 
 HERE = Path(__file__).parent
 PAGE = HERE / "playground.html"
@@ -85,16 +86,29 @@ def main() -> None:
             f"{f' matching “{query}”' if query else ''} · ${total:.4f} spent on these calls")
 
     # Stand-in for the playground server: answers the page's /api requests from the embedded calls.
-    data = json.dumps({"calls": calls, "note": note, "total": total}, ensure_ascii=False).replace("</", "<\\/")
+    trials = load_trials()
+    for t in trials:  # run counts per series, as the server reports them
+        counts = {}
+        for c in calls:
+            if c.get("trial_id") == t["id"]:
+                counts[c.get("series") or ""] = counts.get(c.get("series") or "", 0) + 1
+        t["series_counts"], t["runs"] = counts, sum(counts.values())
+    trials = [t for t in trials if t["runs"]]  # only trials with calls in this export
+    data = json.dumps({"calls": calls, "trials": trials, "note": note, "total": total}, ensure_ascii=False).replace("</", "<\\/")
     stub = f"""<script>
   window.EXPORT = {data};
   window.fetch = async (url) => {{
     const u = new URL(url, "http://export.local/");
     const reply = (body, ok = true) => ({{ ok, statusText: "", json: async () => body }});
     if (u.pathname === "/api/info") return reply({{ default_model: "", models: [], total_cost: EXPORT.total }});
+    if (u.pathname === "/api/trials") return reply({{ trials: EXPORT.trials }});
     if (u.pathname === "/api/history") {{
       const q = (u.searchParams.get("q") || "").trim().toLowerCase();
-      return reply({{ calls: q ? EXPORT.calls.filter((c) => (c.name || "").toLowerCase().includes(q)) : EXPORT.calls }});
+      const trial = u.searchParams.get("trial"), known = new Set(EXPORT.trials.map((t) => t.id));
+      let calls = EXPORT.calls;
+      if (trial) calls = calls.filter((c) => c.trial_id === trial);
+      else if (trial === "") calls = calls.filter((c) => !known.has(c.trial_id));
+      return reply({{ calls: q ? calls.filter((c) => (c.name || "").toLowerCase().includes(q)) : calls }});
     }}
     return reply({{ error: "This is a read-only export; sending prompts needs the playground server." }}, false);
   }};
@@ -106,7 +120,7 @@ def main() -> None:
     html = html.replace("\r\n", "\n")
     assert html.count(marker) == 1, "playground.html changed; update the marker in export_playground.py"
     html = html.replace(marker, stub + marker)
-    html = html.replace("<title>Prompt Playground</title>", f"<title>Prompt Playground export {now:%Y-%m-%d}</title>")
+    html = html.replace("<title>LLM Bayesian Priors</title>", f"<title>LLM Bayesian Priors export {now:%Y-%m-%d}</title>")
 
     OUT_DIR.mkdir(exist_ok=True)
     slug = re.sub(r"[^A-Za-z0-9]+", "-", query).strip("-")

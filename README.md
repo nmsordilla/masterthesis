@@ -49,3 +49,35 @@ git add -A && git commit -m "Update plan" && git push
 ## Publish with GitHub Pages
 
 Repo → Settings → Pages → Source: *Deploy from a branch* → `main` / root. Mind that a public repo makes the plan public; use a private repo (Pages on private repos needs GitHub Pro) if you prefer.
+
+## Code (prior elicitation)
+
+Everything for calling the models is in `code/`. Run commands from the project root.
+
+### Setup
+
+```bash
+pip install -r code/requirements.txt
+```
+
+Copy `.env.example` to `.env` and put your keys in `.env` (gitignored): `OPENAI_API_KEY` for OpenAI models, `ANTHROPIC_API_KEY` for Claude models. You only need the key of the provider you use. Never put a key in `.env.example`: that file is committed.
+
+### Files
+
+| File | What it does |
+|---|---|
+| `code/openai_client.py` | `ask()` / `ask_with_reasoning()`: send a prompt (optionally with attached files, web search, reasoning effort) and log it. Works for OpenAI and Claude models; the model name decides. |
+| `code/claude_client.py` | How Claude models (`claude-...`) are called: prices, effort levels, prompt caching of attached files, refusal fallback. Used through `ask()`. |
+| `code/playground.py` + `playground.html` | **LLM Bayesian Priors**, the local web page: `python code/playground.py`, then open http://127.0.0.1:8000. Create a clinical trial, start runs for it (one or many, in named series), and compare the elicited priors in a plot and table per trial. Restart it after changing Python code. |
+| `code/trials.json` | The clinical trials created in the page (name, NCT number, notes, optional reported result for comparison). |
+| `code/pdf_to_md.py` | Converts attached PDFs (protocol, SAP) to Markdown, so only text is sent. `python code/pdf_to_md.py file.pdf` shows its size first. |
+| `code/export_playground.py` | Saves the playground and the log as one offline, read-only HTML file in `code/exports/`. |
+| `code/archive/` | Earlier experiments, kept for the record (see the README in each folder). |
+
+### Generated files (all gitignored)
+
+| Where | What |
+|---|---|
+| `code/logs/openai_calls.jsonl` | Every call: prompt, settings, attached file names and hashes, answer, reasoning summary, tokens, cost. This is the record behind every elicited prior; back it up. |
+| `code/extracted/` | The Markdown sent for each attached PDF. |
+| `code/exports/` | Offline exports of the playground. |

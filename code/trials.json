@@ -1,0 +1,114 @@
+{
+  "trials": [
+    {
+      "name": "ASCENT-04/KEYNOTE-D19",
+      "nct": "NCT05382286",
+      "notes": "Previously untreated, PD-L1-positive (CPS ≥10), locally advanced inoperable or metastatic triple-negative breast cancer; sacituzumab govitecan + pembrolizumab vs physician's-choice chemotherapy (paclitaxel, nab-paclitaxel or gemcitabine/carboplatin) + pembrolizumab; primary endpoint PFS by BICR per RECIST v1.1",
+      "result": {
+        "measure": "HR",
+        "estimate": 0.65,
+        "lower": 0.51,
+        "upper": 0.84,
+        "source": "ITT, PFS by BICR · Tolaney SM et al., N Engl J Med 2026;394(4):354-366 (primary results first presented as ASCO 2025 LBA109, Tolaney et al., J Clin Oncol 43(17_suppl))"
+      },
+      "id": "ascent-04-keynote-d19",
+      "created": "2026-11-22T14:06:27+00:00"
+    },
+    {
+      "name": "NRG-GY018",
+      "nct": "NCT03914612",
+      "notes": "Advanced or recurrent endometrial cancer; pembrolizumab + paclitaxel/carboplatin vs placebo + paclitaxel/carboplatin; primary endpoint investigator-assessed progression-free survival (PFS) per RECIST v1.1.",
+      "result": {
+        "measure": "HR",
+        "estimate": 0.3,
+        "lower": 0.19,
+        "upper": 0.48,
+        "source": "dMMR cohort, PFS · Eskander RN et al., N Engl J Med. 2023"
+      },
+      "id": "nrg-gy018",
+      "created": "2026-11-22T16:50:55+00:00"
+    },
+    {
+      "name": "THINRS",
+      "nct": "NCT00032591",
+      "notes": "Patients taking warfarin for atrial fibrillation or mechanical heart valves; weekly home self-testing of INR vs. high-quality monthly testing in a clinic; primary endpoint was time to first major event (stroke, major bleeding or death)",
+      "result": {
+        "measure": "HR",
+        "estimate": 0.88,
+        "lower": 0.75,
+        "upper": 1.04,
+        "source": "Weekly self-testing vs monthly clinic testing: time to first stroke, major bleed or death · Matchar DB et al., N Engl J Med, 2010"
+      },
+      "id": "thinrs",
+      "created": "2026-11-23T13:32:37+00:00"
+    },
+    {
+      "name": "CLEAR SYNERGY-Colchicine",
+      "nct": "NCT03048825",
+      "notes": "Patients with acute myocardial infarction (STEMI or NSTEMI) treated with PCI; colchicine 0.5 mg daily vs placebo (2x2 factorial design with spironolactone); primary endpoint was the first occurrence of cardiovascular death, recurrent MI, stroke or unplanned ischemia-driven revascularization",
+      "result": {
+        "measure": "HR",
+        "estimate": 0.99,
+        "lower": 0.85,
+        "upper": 1.16,
+        "source": "Colchicine vs placebo, composite of CV death, recurrent MI, stroke or unplanned ischemia-driven revascularization · Jolly SS et al., N Engl J Med, 2025 (published online Nov 2024)"
+      },
+      "id": "clear-synergy-colchicine",
+      "created": "2026-11-23T14:01:25+00:00"
+    },
+    {
+      "name": "THOR",
+      "nct": "NCT03390504",
+      "notes": "Patients with advanced/metastatic urothelial carcinoma harboring selected FGFR alterations; erdafitinib versus chemotherapy (cohort 1) and erdafitinib versus pembrolizumab (cohort 2); primary endpoint: overall survival (OS).",
+      "result": {
+        "measure": "HR",
+        "estimate": 0.64,
+        "lower": 0.47,
+        "upper": 0.88,
+        "source": "Cohort 1: Erdafitinib vs Chemotherapy (OS) · Loriot et al., N Engl J Med, 2023"
+      },
+      "id": "thor",
+      "created": "2026-11-23T14:26:25+00:00"
+    },
+    {
+      "name": "NAVIGATE-ESUS",
+      "nct": "NCT02313909",
+      "notes": "Patients with recent embolic stroke of undetermined source (ESUS); rivaroxaban (15 mg daily) vs aspirin (100 mg daily); co-primary outcomes of composite efficacy (recurrent stroke or systemic embolism) and primary safety (major bleeding)",
+      "result": {
+        "measure": "HR",
+        "estimate": 1.07,
+        "lower": 0.87,
+        "upper": 1.33,
+        "source": "Primary efficacy outcome (recurrent stroke or systemic embolism) · Hart et al., N Engl J Med, 2018"
+      },
+      "documents": [
+        {
+          "kind": "protocol",
+          "filename": "NAVIGATE-ESUS_protocol.pdf",
+          "bytes": 800067,
+          "sha256": "a8a129d640505805c5a7e0f12cd28e58dfe4574f550433880a1144c871d9e67a",
+          "markdown_file": "NAVIGATE-ESUS_protocol_a8a129d64050.md",
+          "chars": 185787,
+          "uploaded": "2026-11-24T14:15:40+00:00"
+        }
+      ],
+      "summary": {
+        "text": "Population: Adults with a recent Embolic Stroke of Undetermined Source (ESUS) (non-lacunar ischemic stroke or TIA with positive neuroimaging) enrolled between 7 days and 6 months after index event (earlier allowed for minor stroke); multicenter international population recruited primarily from hospital stroke units\n\nKey eligibility criteria: Main inclusion: recent ESUS defined as non-lacunar ischemic stroke (or TIA with positive imaging) without >50% ipsilateral extracranial/intracranial atherosclerotic stenosis or occlusion, no history or documented AF (no AF on 12-lead ECG and no AF episode ≥6 minutes on ≥24-hour cardiac monitoring; ≥20 hours acceptable), no intracardiac thrombus on transthoracic or transesophageal echo, all planned diagnostic tests for stroke evaluation completed or to be completed during screening, age ≥50 years (patients 50–59 must have ≥1 risk factor: prior stroke/TIA including covert infarct on imaging, diabetes, hypertension, current tobacco use, or heart failure), able to start study drug between 7 days and 6 months after index stroke (with specified earlier/later exceptions); written informed consent. Main exclusion: severely disabling stroke (mRS ≥4), >50% luminal stenosis or occlusion in arteries supplying ischemic territory (if intracranial imaging performed), patent foramen ovale planned for closure, indication for chronic anticoagulation or for chronic antiplatelet therapy that cannot be substituted, implantable ECG loop recorder planned/placed, active bleeding or major bleeding within last 6 months or other high bleeding risk including prior primary intracranial hemorrhage, hepatic disease with coagulopathy/Child-Pugh B/C, eGFR <30 mL/min/1.73 m2, life expectancy <6 months, concomitant systemic strong CYP3A4 and P-gp inhibitors, women of childbearing potential not using adequate contraception, inability to cooperate, recent participation in another investigational study (within 30 days)\n\nExperimental arm: Rivaroxaban 15 mg immediate-release tablet, oral once daily with food; administered as rivaroxaban plus aspirin-placebo (double-dummy) according to study dosing schedule\n\nControl arm: Aspirin 100 mg enteric-coated tablet, oral once daily with food; administered as aspirin plus rivaroxaban-placebo (double-dummy) according to study dosing schedule\n\nPrimary endpoint: Time from randomization to first adjudicated occurrence of the composite of stroke (ischemic, hemorrhagic, or undefined stroke; and TIA with positive neuroimaging) or systemic embolism; suspected events adjudicated centrally by an Independent Central Adjudication Committee blinded to treatment; primary analysis estimates treatment effect as hazard ratio (HR) using age-stratified Cox proportional hazards model (primary hypothesis tested with a stratified log-rank test)\n\nKey secondary endpoints: Time to first occurrence of: (1) cardiovascular death (including fatal hemorrhage), recurrent stroke, systemic embolism, or myocardial infarction (hierarchically ordered testing); (2) all-cause mortality; (3) individual components of the primary and secondary outcomes (stroke, CV death, MI), ischemic stroke, and disabling stroke (mRS 4–5). Safety endpoints include ISTH major bleeding, life-threatening bleeding, clinically relevant non-major bleeding, and intracranial hemorrhage; analyses similar to primary methods with hierarchical testing for ordered secondary efficacy endpoints.\n\nDesign: Phase III, multicenter, randomized, double-blind, double-dummy, active-comparator, event-driven, superiority trial; 1:1 randomization stratified by country and age group (<60 vs ≥60 years); Independent Data Monitoring Committee (IDMC) oversight and Independent Central Adjudication Committee (ICAC) for outcomes; no planned crossover; conducted in ~30 countries (international)\n\nSample size and primary analysis: Planned enrollment approximately 7000 patients (~3500 per arm) to accrue ~450 centrally adjudicated primary efficacy events (event-driven). Planned follow-up: clinic visits at randomization, 1 month, 6 months, 12 months and then every 6 months until efficacy cut-off; telephone contact at 3 months and safety phone visit 1 month after end-of-treatment. Two formal interim efficacy analyses planned (when ~50% and ~67% of primary events accrued) with IDMC review and possible recommendation to stop for overwhelming superiority; IDMC may initiate additional interim looks if appropriate. Primary analysis population: intent-to-treat (all randomized patients); primary hypothesis tested by age-stratified log-rank test; treatment effect estimated by age-stratified Cox proportional hazards model with two-sided 95% CIs; Kaplan–Meier curves and cumulative incidence functions provided. Safety analyses based on treated patients (all who received ≥1 dose). On-treatment data scope defined for analyses that consider events until 2 days after permanent study drug discontinuation. Further analysis details to be specified in SAP and IDMC charter.",
+        "power": "Assumed control composite event rate ~3.8% per year (assumed 4.0%/yr for ≥60-year subgroup, 2.0%/yr for ~10% of patients <60 years); assumed relative risk reduction with rivaroxaban 30% (expected); planned ~450 events provides 90% power with one-sided alpha = 0.025 (i.e., two-sided 95% CI) under these assumptions; additional operational assumptions: ~10% permanent discontinuation of study drug in year 1 and 7% in subsequent years, ~5% of patients converting to AF-standard treatment during study, ~3% deaths/yr and ~1% lost-to-follow-up/yr",
+        "identifiers": "NAVIGATE ESUS; NCT02313909; EudraCT 2013-000768-27; Study no. BAY 59-7939/16573; Sponsor: Bayer HealthCare AG",
+        "document_versions": "Study Protocol (Integrated Clinical Study Protocol BAY 59-7939/16573) Version 2.0 dated 05 November 2015 (integrates original protocol and Global Amendment 5)",
+        "results_warning": null,
+        "notes": "Protocol Version 2.0 incorporates Global Protocol Amendment 5. Key changes in Version 2.0 include raising minimum eligible age to ≥50 years with added risk-factor requirement for 50–59-year-olds, changing wording on stenosis threshold to >50% for exclusions, allowing ≥20-hour cardiac monitoring as acceptable, adding transesophageal echocardiography as acceptable for intracardiac thrombus assessment, removal of Digit Symbol Substitution (DSS) test, addition of a second formal interim analysis (~67% events) and IDMC flexibility for additional interim looks, and allowance for blinded review of overall event rate to adjust enrollment or stop enrollment in the 50–59 age group. Latest available protocol version used; no study results are reported in these documents.",
+        "documents": [
+          "a8a129d640505805c5a7e0f12cd28e58dfe4574f550433880a1144c871d9e67a"
+        ],
+        "model": "gpt-5-mini",
+        "cost": 0.007597,
+        "created": "2026-11-24T14:19:07+00:00",
+        "edited": false
+      },
+      "id": "navigate-esus",
+      "created": "2026-11-24T14:27:41+00:00"
+    }
+  ]
+}

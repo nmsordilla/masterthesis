@@ -11,11 +11,23 @@ Usage from Python:
 
     answer, reasoning = ask_with_reasoning("...")  # also see how it got there
 
+    # Attach documents (e.g. the trial protocol / SAP) instead of pasting them into the prompt:
+    ask("Summarise the primary endpoint.", files=["data/protocol.pdf", "data/sap.pdf"])
+
+    # Claude models work the same way (needs ANTHROPIC_API_KEY in .env; see claude_client.py):
+    ask("...", model="claude-opus-5-5")
+
+    # And Gemini models (needs GEMINI_API_KEY in .env; see gemini_client.py):
+    ask("...", model="gemini-3.8-flash")
+
 Usage from the terminal:
     python code/openai_client.py "What is a prior distribution?"
 """
 
+import base64
+import hashlib
 import json
+import mimetypes
 import os
 import sys
 import time
@@ -86,6 +98,10 @@ PRICES = {
 # is already counted in the call's input tokens, which PRICES covers.
 WEB_SEARCH_PRICE = 0.01
 
+# Files read as plain text and placed in the prompt. PDFs are converted to Markdown first
+# (pdf_to_md.py) and sent as text too. Anything else (e.g. Word) is sent to the API as a file.
+TEXT_EXTENSIONS = {".txt", ".md", ".csv", ".tsv", ".json", ".xml", ".html", ".tex", ".r", ".py", ".sas", ".yaml", ".yml"}
+
 _client = None
 
 
@@ -108,6 +124,8 @@ def ask(
     log: bool = True,
     name: str | None = None,
     effort: str | None = None,
+    files: list | None = None,
+    meta: dict | None = None,
 ) -> str:
     """Send a prompt to an OpenAI model and return its text answer.
 
@@ -115,6 +133,7 @@ def ask(
         prompt: The user prompt.
         system: Optional system instructions (role, output format, ...).
         model: Model name, e.g. "gpt-5-mini" or "gpt-4.1". Defaults to $OPENAI_MODEL.
+            Names starting with "claude-" (e.g. "claude-opus-5-5") go to Anthropic instead.
         temperature: Sampling temperature. Leave as None for reasoning models
             (e.g. the gpt-5 family), which do not accept it.
         web_search: Let the model search the web (OpenAI's built-in web_search tool).
@@ -126,11 +145,20 @@ def ask(
         effort: Reasoning effort, e.g. "none", "minimal", "low", "medium", "high", "xhigh".
             None leaves it to the model's default. Which values are accepted depends on the
             model; the effort actually used is logged as reasoning_effort.
+        files: Documents to attach, e.g. the trial protocol or SAP. Each item is a path, or a
+            (filename, bytes) pair. PDFs are converted to Markdown on this computer and only that
+            text is sent (saved under code/extracted/, see pdf_to_md.py); figures are not included.
+            Text files (TEXT_EXTENSIONS) are placed in the prompt as they are. Other documents
+            (e.g. Word) are sent to the API as files. The files go before the prompt, so
+            repeated calls with the same files can get the cheaper cached-input price. The log
+            records each file's name, size and SHA-256, not its contents.
+        meta: Extra fields saved with the logged call, e.g. {"trial_id": ..., "series": ..., "run": 3}
+            (the playground uses this to group runs by clinical trial).
 
     Returns:
         The model's answer as a string.
     """
-    return _call(prompt, system, model, temperature, None, web_search, log, name, effort)[0]
+    return _call(prompt, system, model, temperature, None, web_search, log, name, effort, files, meta)[0]
 
 
 def ask_with_reasoning(
@@ -142,6 +170,8 @@ def ask_with_reasoning(
     log: bool = True,
     name: str | None = None,
     effort: str | None = None,
+    files: list | None = None,
+    meta: dict | None = None,
 ) -> tuple[str, str]:
     """Like ask(), but also return a summary of the model's reasoning.
 
@@ -150,16 +180,68 @@ def ask_with_reasoning(
 
     Args:
         summary: "auto", "concise" or "detailed".
-        web_search, name, effort: See ask().
+        web_search, name, effort, files, meta: See ask().
 
     Returns:
         (answer, reasoning_summary). The summary is "" if the model returned none.
     """
-    return _call(prompt, system, model, None, summary, web_search, log, name, effort)
+    return _call(prompt, system, model, None, summary, web_search, log, name, effort, files, meta)
 
 
-def _call(prompt, system, model, temperature, summary, web_search, log, name=None, effort=None) -> tuple[str, str]:
-    params = {"model": model, "input": prompt}
+def _read_file(item) -> tuple[str, bytes]:
+    """A path or a (filename, bytes) pair → (filename, bytes)."""
+    if isinstance(item, (tuple, list)):
+        filename, data = item
+        return Path(filename).name, bytes(data)
+    path = Path(item)
+    return path.name, path.read_bytes()
+
+
+def build_input(prompt: str, files: list | None) -> tuple[str | list, list[dict]]:
+    """The Responses API input for a prompt with attached files, and a log entry per file."""
+    if not files:
+        return prompt, []
+    content, info = [], []
+    for item in files:
+        filename, data = _read_file(item)
+        ext = Path(filename).suffix.lower()
+        entry = {
+            "filename": filename,
+            "bytes": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),  # identifies the exact version of the document
+        }
+        if ext == ".pdf":
+            from pdf_to_md import pdf_to_markdown
+
+            text, saved = pdf_to_markdown(filename, data)
+            content.append({"type": "input_text", "text": f'<file name="{Path(filename).stem}.md">\n{text}\n</file>'})
+            entry.update(sent_as="markdown", markdown_chars=len(text), markdown_file=saved.name)
+        elif ext in TEXT_EXTENSIONS:
+            text = data.decode("utf-8", errors="replace")
+            content.append({"type": "input_text", "text": f'<file name="{filename}">\n{text}\n</file>'})
+            entry.update(sent_as="text")
+        else:
+            mime = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+            encoded = base64.b64encode(data).decode("ascii")
+            content.append({"type": "input_file", "filename": filename, "file_data": f"data:{mime};base64,{encoded}"})
+            entry.update(sent_as="file")
+        info.append(entry)
+    content.append({"type": "input_text", "text": prompt})
+    return [{"role": "user", "content": content}], info
+
+
+def _call(prompt, system, model, temperature, summary, web_search, log, name=None, effort=None, files=None,
+          meta=None) -> tuple[str, str]:
+    if model.startswith("claude-"):  # Anthropic models are handled in claude_client.py
+        from claude_client import call_claude
+
+        return call_claude(prompt, system, model, temperature, summary, web_search, log, name, effort, files, meta=meta)
+    if model.startswith("gemini-"):  # Google models are handled in gemini_client.py
+        from gemini_client import call_gemini
+
+        return call_gemini(prompt, system, model, temperature, summary, web_search, log, name, effort, files, meta=meta)
+    api_input, file_info = build_input(prompt, files)
+    params = {"model": model, "input": api_input}
     if system:
         params["instructions"] = system
     if temperature is not None:
@@ -186,7 +268,7 @@ def _call(prompt, system, model, temperature, summary, web_search, log, name=Non
     )
 
     if log:
-        _log_call(params, response, answer, reasoning, time.perf_counter() - start, name)
+        _log_call(params, response, answer, reasoning, time.perf_counter() - start, name, prompt, file_info, meta)
     return answer, reasoning
 
 
@@ -206,14 +288,15 @@ def call_cost(model: str, input_tokens: int, cached_tokens: int, output_tokens: 
 
 
 def total_cost(log_file: Path | None = None) -> float:
-    """Sum of cost_usd over every call in the log."""
-    log_file = log_file or LOG_FILE
-    if not log_file.exists():
-        return 0.0
+    """Sum of cost_usd over every call in the log. With no log_file given, this includes the calls
+    deleted in the playground (logs/deleted_calls.jsonl): they were still paid for."""
+    files = [log_file] if log_file else [LOG_FILE, LOG_FILE.with_name("deleted_calls.jsonl")]
     total = 0.0
-    for line in log_file.read_text(encoding="utf-8").splitlines():
-        if line.strip():
-            total += json.loads(line).get("cost_usd") or 0.0
+    for f in files:
+        if f.exists():
+            for line in f.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    total += json.loads(line).get("cost_usd") or 0.0
     return total
 
 
@@ -243,7 +326,10 @@ def web_search_details(response) -> dict:
     }
 
 
-def _log_call(params: dict, response, answer: str, reasoning: str, seconds: float, name: str | None = None) -> None:
+def _log_call(
+    params: dict, response, answer: str, reasoning: str, seconds: float, name: str | None = None,
+    prompt: str | None = None, files: list[dict] | None = None, meta: dict | None = None,
+) -> None:
     """Write one JSON line per call so every prior can be traced back to its prompt."""
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     usage = getattr(response, "usage", None)
@@ -262,6 +348,7 @@ def _log_call(params: dict, response, answer: str, reasoning: str, seconds: floa
     record = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "name": (name or "").strip() or None,
+        **(meta or {}),  # e.g. trial_id, series, run
         "model_requested": params["model"],
         "model_returned": getattr(response, "model", None),  # exact snapshot used
         "response_id": getattr(response, "id", None),
@@ -269,7 +356,8 @@ def _log_call(params: dict, response, answer: str, reasoning: str, seconds: floa
         "reasoning_effort_requested": params.get("reasoning", {}).get("effort"),  # None = model default
         "reasoning_effort": getattr(getattr(response, "reasoning", None), "effort", None),  # as reported by the API
         "system": params.get("instructions"),
-        "prompt": params["input"],
+        "prompt": prompt if prompt is not None else params["input"],
+        "files": files or None,  # name, size and SHA-256 of each attached document
         "answer": answer,
         "reasoning_summary": reasoning or None,
         "web_search": "tools" in params,
