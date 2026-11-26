@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Prompt Playground</title>
+  <title>LLM Bayesian Priors</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
@@ -14,6 +14,9 @@
       --border: #dfe3ea; --accent: #2f5bd3; --accent-text: #ffffff;
       --code-bg: #f1f3f7; --error: #b3261e; --error-bg: #fdecea;
       --warn: #7a4b00; --warn-bg: #fff4dc;
+      /* chart: categorical series (validated palette, light), chrome */
+      --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #e34948;
+      --chart-surface: #fcfcfb; --grid: #e1e0d9; --axis: #c3c2b7; --ink-2: #52514e; --ink-muted: #898781; --ref-band: rgba(82, 81, 78, 0.12);
     }
     @media (prefers-color-scheme: dark) {
       :root {
@@ -21,188 +24,432 @@
         --border: #2d323d; --accent: #7d9bff; --accent-text: #0e1220;
         --code-bg: #232733; --error: #ffb4ab; --error-bg: #3a1d1b;
         --warn: #ffd58a; --warn-bg: #3a2e14;
+        --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #0ca30c; --s7: #9085e9; --s8: #e66767;
+        --chart-surface: #1a1a19; --grid: #2c2c2a; --axis: #383835; --ink-2: #c3c2b7; --ink-muted: #898781; --ref-band: rgba(195, 194, 183, 0.14);
       }
     }
     * { box-sizing: border-box; }
-    body {
-      margin: 0; background: var(--bg); color: var(--text);
-      font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
-    }
-    .wrap { max-width: 1200px; margin: 0 auto; padding: 24px 16px 48px; }
-    header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    .wrap { max-width: 1280px; margin: 0 auto; padding: 24px 16px 48px; }
+    header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
     h1 { font-size: 22px; margin: 0; }
+    h2 { font-size: 15px; margin: 0 0 8px; }
+    h3 { font-size: 14px; margin: 0; }
     .muted { color: var(--muted); font-size: 13px; }
     .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
-    @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
     .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
     label { display: block; font-weight: 600; font-size: 13px; margin: 0 0 6px; }
-    textarea, input, select {
-      width: 100%; font: inherit; color: var(--text); background: var(--bg);
-      border: 1px solid var(--border); border-radius: 8px; padding: 10px;
-    }
+    textarea, input, select { width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
     textarea { resize: vertical; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13.5px; }
-    #system { min-height: 90px; }
-    #prompt { min-height: 260px; }
+    #system { min-height: 220px; }
+    #prompt { min-height: 150px; }
     .field { margin-bottom: 14px; }
     .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
-    .row > .field { flex: 1 1 160px; }
+    .row > .field { flex: 1 1 150px; }
     .check { display: flex; align-items: center; gap: 8px; font-weight: 500; margin-bottom: 14px; }
     .check input { width: auto; }
-    button {
-      font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 10px 18px;
-      background: var(--accent); color: var(--accent-text); cursor: pointer;
-    }
-    button:disabled { opacity: .6; cursor: progress; }
+    button { font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 10px 18px; background: var(--accent); color: var(--accent-text); cursor: pointer; }
+    button:disabled { opacity: .6; cursor: not-allowed; }
     button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--border); padding: 6px 12px; font-size: 13px; }
-    h2 { font-size: 15px; margin: 0 0 8px; }
-    pre {
-      white-space: pre-wrap; word-wrap: break-word; margin: 0; background: var(--code-bg);
-      border-radius: 8px; padding: 12px; font: 13.5px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
-      min-height: 48px;
-    }
+    button.danger { color: var(--error); }
+    pre { white-space: pre-wrap; word-wrap: break-word; margin: 0; background: var(--code-bg); border-radius: 8px; padding: 12px; font: 13.5px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; }
     .section { margin-bottom: 16px; }
     .stats { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); }
     .stats b { color: var(--text); font-weight: 600; }
     .error { background: var(--error-bg); color: var(--error); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
-    .hidden { display: none; }
-    details { border-top: 1px solid var(--border); padding: 10px 0; }
-    .item { display: flex; gap: 10px; align-items: flex-start; border-top: 1px solid var(--border); padding: 10px 0; }
-    .item > details { flex: 1; min-width: 0; border: 0; padding: 0; }
-    .item > .pick { width: auto; margin-top: 5px; flex: none; cursor: pointer; }
-    .copybar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 8px; font-size: 13px; }
-    .copybar .check { margin: 0; font-weight: 500; color: var(--muted); }
+    .warn { background: var(--warn-bg); color: var(--warn); border-radius: 8px; padding: 8px 12px; font-size: 13px; }
+    .hidden { display: none !important; }
+    .head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
     .head .actions { display: flex; align-items: center; gap: 12px; }
-    summary { cursor: pointer; font-size: 13.5px; }
-    summary .muted { margin-left: 6px; }
-    .history-body { margin-top: 8px; display: grid; gap: 8px; }
-    .history-body .actions { display: flex; gap: 8px; }
-    .warn { background: var(--warn-bg); color: var(--warn); border-radius: 8px; padding: 8px 12px; font-size: 13px; margin: -6px 0 14px; }
+    .head .check { margin: 0; font-size: 13px; color: var(--muted); }
+    .badge { display: inline-block; font-size: 11px; font-weight: 600; border-radius: 4px; padding: 0 6px; margin-left: 6px; background: var(--warn-bg); color: var(--warn); white-space: nowrap; }
     .web { font-size: 13.5px; }
     .web ul { margin: 4px 0 10px; padding-left: 1.3em; }
     .web li { margin: 2px 0; overflow-wrap: anywhere; }
-    .web a { color: var(--accent); }
-    .case { font-weight: 600; }
-    /* Read-only export (export_playground.py): no prompt form, results full width */
-    body.export #form { display: none; }
+    a { color: var(--accent); }
+
+    /* Trial bar */
+    .trialbar { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 12px; margin-bottom: 20px; }
+    .trialbar .field { margin: 0; flex: 1 1 320px; max-width: 520px; }
+    .trialbar .meta { font-size: 13px; color: var(--muted); align-self: center; }
+    #trialInfo { margin: -8px 0 20px; }
+    #trialInfo summary { cursor: pointer; font-weight: 600; }
+    #trialInfoBody > div { margin: 3px 0; }
+    #trialForm { margin-bottom: 20px; }
+    #docsBox > summary { cursor: pointer; }
+    #tSummary { min-height: 220px; }
+    .parts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 6px; }
+    .parts .check { margin: 0; font-size: 13px; }
+    .parts button { margin-left: auto; }
+    #trialForm .row > .field { flex: 1 1 140px; }
+
+    /* Files */
+    .drop { border: 1px dashed var(--border); border-radius: 8px; padding: 10px; background: var(--bg); }
+    .drop.over { border-color: var(--accent); }
+    .drop input[type=file] { display: none; }
+    .files { list-style: none; margin: 8px 0 0; padding: 0; font-size: 13.5px; }
+    .files li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 3px 0; overflow-wrap: anywhere; }
+    .files button { padding: 2px 8px; font-size: 12px; }
+
+    /* Batch progress */
+    .batch { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 14px; font-size: 13.5px; }
+    .batch .bar { height: 6px; background: var(--code-bg); border-radius: 3px; overflow: hidden; margin: 8px 0; }
+    .batch .bar > div { height: 100%; background: var(--accent); width: 0; transition: width .3s; }
+    .batch .top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .batch .top button { padding: 4px 12px; font-size: 13px; }
+    .batch ul { margin: 6px 0 0; padding-left: 1.2em; color: var(--error); }
+
+    /* Results for a trial */
+    .results-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--ink-2); margin: 4px 0 6px; align-items: center; }
+    .legend .key { display: inline-flex; align-items: center; gap: 6px; }
+    .legend .key i { display: inline-block; width: 16px; height: 2px; border-radius: 1px; }
+    .legend .key i.thin { height: 1px; opacity: .6; }
+    .legend .key i.band { height: 10px; width: 14px; background: var(--ref-band); border-left: 2px solid var(--ink-2); border-radius: 0; }
+    .chart { position: relative; background: var(--chart-surface); border-radius: 8px; padding: 4px 0; }
+    .chart svg { display: block; width: 100%; height: auto; }
+    .chart text { font: 12px system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--ink-muted); }
+    .chart text.ink { fill: var(--ink-2); }
+    .tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; box-shadow: 0 4px 16px rgba(0,0,0,.12); min-width: 170px; }
+    .tip .t { font-weight: 600; margin-bottom: 4px; }
+    .tip .r { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+    .tip .r i { width: 12px; height: 2px; display: inline-block; }
+    .tip .r b { margin-left: auto; font-variant-numeric: tabular-nums; }
+    table.runs { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+    table.runs th { text-align: left; font-weight: 600; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    table.runs td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    table.runs tr.run { cursor: pointer; }
+    table.runs tr.run:hover td { background: var(--code-bg); }
+    table.runs tr.series-row td { background: var(--bg); font-weight: 600; padding: 10px 8px; }
+    table.runs tr.series-row .sum { font-weight: 400; color: var(--muted); margin-left: 10px; }
+    table.runs .num { text-align: right; }
+    table.runs td.detail { background: var(--bg); padding: 12px; }
+    table.runs input[type=checkbox] { width: auto; }
+    .swatch { display: inline-block; width: 16px; height: 2px; border-radius: 1px; vertical-align: middle; margin-right: 6px; }
+    .detail-body { display: grid; gap: 10px; }
+    .detail-body .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .copybar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 14px 0 8px; font-size: 13px; }
+    .copybar .check { margin: 0; font-weight: 500; color: var(--muted); }
+    .history-tools input { max-width: 360px; padding: 6px 10px; font-size: 13.5px; margin-bottom: 8px; }
+    .item { border-top: 1px solid var(--border); padding: 10px 0; display: flex; gap: 10px; }
+    .item > details { flex: 1; min-width: 0; }
+    .item > input { width: auto; margin-top: 5px; }
+    summary { cursor: pointer; font-size: 13.5px; }
+    .prior { display: inline-block; font: 600 12.5px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; border-radius: 4px; padding: 0 7px; margin: 0 4px; background: var(--code-bg); white-space: nowrap; }
+
+
+    /* Page layout: three numbered steps, each split into labelled sections */
+    .step-title { display: flex; align-items: center; gap: 10px; margin: 28px 0 10px; }
+    .step-title h2 { font-size: 17px; margin: 0; }
+    .step-title .num { flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--accent-text);
+      display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; }
+    header + .error + .step-title, header + .step-title { margin-top: 8px; }
+    .form-title { font-size: 16px; margin: 0 0 4px; }
+    .sect { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 16px; }
+    .sect:first-child, .form-title + .sect { border-top: 0; padding-top: 0; margin-top: 8px; }
+    .sect > h3 { font-size: 12.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 10px; font-weight: 700; }
+    .sect > h3 .muted { text-transform: none; letter-spacing: 0; font-weight: 400; }
+    .sect > h3 .letter { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 5px;
+      background: var(--code-bg); color: var(--text); margin-right: 4px; font-size: 12px; }
+    .help { color: var(--muted); font-size: 13.5px; margin: -4px 0 12px; max-width: 900px; }
+    .substep { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 12px; }
+    .substep > .n { flex: none; width: 20px; height: 20px; margin-top: 6px; border-radius: 50%; border: 1px solid var(--border);
+      display: inline-flex; align-items: center; justify-content: center; font-size: 11.5px; color: var(--muted); }
+    .substep > .drop, .substep > .grow { flex: 1; min-width: 0; }
+    .inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .inline label { margin: 0; font-weight: 400; }
+    .inline select { width: auto; padding: 6px 8px; }
+    #summaryMeta { font-size: 13.5px; margin-bottom: 8px; }
+    #summaryMeta > div { margin: 2px 0; }
+    #lookupBox { margin-bottom: 12px; font-size: 13.5px; }
+    .form-foot { position: sticky; bottom: 0; z-index: 2; display: flex; gap: 8px; justify-content: space-between; flex-wrap: wrap;
+      background: var(--panel); border-top: 1px solid var(--border); margin: 16px -16px -16px; padding: 12px 16px; border-radius: 0 0 10px 10px; }
+    #trialPanel .trialbar { margin: 0; }
+    #trialInfo { margin: 12px 0 0; border-top: 1px solid var(--border); padding-top: 10px; }
+    #trialInfoBody { margin-top: 8px; font-size: 13.5px; }
+    #form .parts { margin: 0 0 8px; }
+    #partsHint { margin: 0 0 8px; }
+    #form .under { display: flex; justify-content: flex-end; margin-top: 6px; }
+    #form .checks { display: flex; flex-wrap: wrap; gap: 4px 20px; }
+    #form .checks .check { margin-bottom: 8px; }
+    #webWarn { margin: 0 0 10px; }
+    #form .extra { margin-top: 6px; }
+    #runsHint { margin: -4px 0 12px; }
+    #form .start { display: flex; align-items: center; gap: 12px; }
+    .answer-panel { align-self: start; position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; }
+
+    /* Read-only export (export_playground.py): no forms */
+    body.export #form, body.export #trialActions, body.export #trialForm { display: none !important; }
     body.export .grid { grid-template-columns: 1fr; }
-    .runtime { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
-    .history-tools { margin-bottom: 8px; }
-    .history-tools input { max-width: 360px; padding: 6px 10px; font-size: 13.5px; }
-    .badge { display: inline-block; font-size: 11px; font-weight: 600; border-radius: 4px; padding: 0 6px; margin-left: 6px; background: var(--warn-bg); color: var(--warn); }
-    .head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-    .head .check { margin: 0; font-size: 13px; color: var(--muted); }
+    /* Creating a new trial: hide everything that belongs to the trial selected before */
+    body.creating #trialPanel, body.creating .grid, body.creating #step2, body.creating #step3, body.creating #resultsPanel, body.creating #trialMeta { display: none !important; }
 
     /* Rendered Markdown + math */
     .md { background: var(--code-bg); border-radius: 8px; padding: 4px 16px; min-height: 48px; line-height: 1.6; overflow-wrap: break-word; }
     .md.raw { white-space: pre-wrap; padding: 12px; font: 13.5px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; }
     .md h1, .md h2, .md h3, .md h4 { margin: 1.1em 0 .4em; line-height: 1.3; }
-    .md h1 { font-size: 1.3em; } .md h2 { font-size: 1.18em; } .md h3 { font-size: 1.06em; } .md h4 { font-size: 1em; }
     .md p, .md ul, .md ol, .md blockquote { margin: .6em 0; }
     .md ul, .md ol { padding-left: 1.4em; }
-    .md li { margin: .2em 0; }
     .md code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .92em; background: var(--panel); border-radius: 4px; padding: 1px 4px; }
-    .md pre { background: var(--panel); border: 1px solid var(--border); overflow-x: auto; white-space: pre; }
+    .md pre { background: var(--panel); border: 1px solid var(--border); overflow-x: auto; white-space: pre-wrap; }
     .md pre code { background: none; padding: 0; }
+
+    /* A JSON answer shown readably ("Show raw text" shows the JSON as returned) */
+    .ans { padding: 10px 0; }
+    .ans h3 { margin: 4px 0 10px; font-size: 16px; }
+    .ans h4 { margin: 16px 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+    .ans .stats { display: flex; flex-wrap: wrap; gap: 8px; }
+    .ans .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; }
+    .ans .stat b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; }
+    .ans .stat span { font-size: 12px; color: var(--muted); }
+    .ans dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0; }
+    .ans dt { color: var(--muted); font-size: 13.5px; }
+    .ans dd { margin: 0; }
+    .ans .ev { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin: 6px 0; }
+    .ans .ev .when { color: var(--muted); font-size: 13px; font-weight: 400; }
+    .ans .ev dl { margin-top: 4px; }
+    .ans .flag { display: inline-block; border-radius: 4px; padding: 0 6px; font-size: 12.5px; font-weight: 600; background: #f3e1b5; color: #5c4300; }
+    .ans p { margin: .4em 0; }
     .md table { border-collapse: collapse; display: block; overflow-x: auto; margin: .8em 0; font-size: .95em; }
     .md th, .md td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; vertical-align: top; }
-    .md th { background: var(--panel); }
-    .md blockquote { border-left: 3px solid var(--border); padding-left: 12px; color: var(--muted); }
-    .md hr { border: 0; border-top: 1px solid var(--border); margin: 1.2em 0; }
     .md .katex-display { overflow-x: auto; overflow-y: hidden; padding: 4px 0; margin: .8em 0; }
-    .md .katex { font-size: 1.08em; }
   </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <h1>Prompt Playground</h1>
+    <h1>LLM Bayesian Priors</h1>
     <span class="muted">Total spent: <b id="total">–</b> · every call is logged to code/logs/openai_calls.jsonl</span>
   </header>
+  <div class="error hidden" id="error"></div>
 
+  <!-- 1. Choose or create the clinical trial -->
+  <div class="step-title"><span class="num">1</span><h2>Clinical trial</h2></div>
+  <div class="panel" id="trialPanel">
+    <div class="trialbar">
+      <div class="field">
+        <label for="trialSelect">Trial</label>
+        <select id="trialSelect"></select>
+      </div>
+      <div id="trialActions" style="display:flex;gap:8px">
+        <button type="button" id="newTrial">+ New trial</button>
+        <button type="button" class="ghost" id="editTrial">Edit trial</button>
+      </div>
+      <span class="meta" id="trialMeta"></span>
+    </div>
+    <details class="hidden" id="trialInfo" open>
+      <summary>Details of this trial</summary>
+      <div id="trialInfoBody"></div>
+    </details>
+  </div>
+
+  <form class="panel hidden" id="trialForm">
+    <h2 id="trialFormTitle" class="form-title">New clinical trial</h2>
+
+    <section class="sect">
+      <h3><span class="letter">A</span> Basics</h3>
+      <div class="row">
+        <div class="field" style="flex:2 1 260px"><label for="tName">Trial name</label><input id="tName" placeholder="e.g. EMPACT-MI" required></div>
+        <div class="field"><label for="tNct">NCT number (optional)</label><input id="tNct" placeholder="NCT04509674"></div>
+      </div>
+      <div class="field"><label for="tNotes">Notes (optional, for you only)</label><input id="tNotes" placeholder="e.g. empagliflozin after acute MI; result published 2024"></div>
+    </section>
+
+    <section class="sect" id="docsBox">
+      <h3><span class="letter">B</span> Protocol / SAP → trial summary <span class="muted" id="docsCount"></span></h3>
+      <p class="help">Upload the protocol and/or SAP (the versions from before the trial reported). Then click <b>Extract trial summary</b>:
+        one model call writes a description of the design, without the trial's name, NCT number or any results. Runs can put this summary in the prompt.</p>
+      <div class="substep"><span class="n">1</span>
+        <div class="drop" id="docDrop">
+          <div class="inline">
+            <select id="docKind" title="What the next uploaded file is">
+              <option value="protocol">Protocol</option><option value="sap">SAP</option><option value="other">Other</option></select>
+            <button type="button" class="ghost" id="pickDocs">Upload PDF…</button>
+            <span class="muted" id="docStatus">or drop it here (PDF, Markdown or text). Converted to text on this computer; no model involved.</span>
+          </div>
+          <input type="file" id="docInput" multiple accept=".pdf,.md,.txt">
+          <ul class="files" id="docList"></ul>
+        </div>
+      </div>
+      <div class="substep"><span class="n">2</span>
+        <div class="inline">
+          <button type="button" class="ghost" id="extractBtn">Extract trial summary</button>
+          <label for="extractModel" class="muted">with</label>
+          <select id="extractModel" title="Model for the extraction (no web search)"></select>
+          <span class="muted" id="extractStatus">One call, logged and costed, but not a run.</span>
+        </div>
+      </div>
+      <div class="substep"><span class="n">3</span>
+        <div class="grow">
+          <div id="summaryMeta"></div>
+          <div class="field"><label for="tSummary">Trial summary <span class="muted">(check it against the documents; edit freely)</span></label>
+            <textarea id="tSummary" rows="14" placeholder="Filled in by “Extract trial summary”, or write it yourself."></textarea></div>
+          <div class="field"><label for="tPower">Sample-size assumption <span class="muted">(kept separate: only sent when you tick it for a run)</span></label>
+            <textarea id="tPower" rows="3" placeholder="e.g. HR 0.80 assumed; event rate 15% per year in the placebo arm; two-sided alpha 0.05; 90% power"></textarea></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="sect">
+      <h3><span class="letter">C</span> Reported result <span class="muted">(optional: only drawn in the plot for comparison, never sent to the model)</span></h3>
+      <div class="inline" style="margin-bottom:10px">
+        <button type="button" class="ghost" id="lookupBtn">Look up the reported result</button>
+        <label for="lookupModel" class="muted">with</label>
+        <select id="lookupModel" title="Model for the lookup (uses web search)"></select>
+        <span class="muted" id="lookupStatus">Reads ClinicalTrials.gov, then asks this model (with web search). Logged and costed, but not a run.</span>
+      </div>
+      <div class="hidden" id="lookupBox"></div>
+      <div class="row">
+        <div class="field"><label for="tMeasure">Measure</label>
+          <select id="tMeasure"><option>HR</option><option>RR</option><option>OR</option><option value="rate_ratio">rate ratio</option><option value="mean_difference">mean difference</option></select></div>
+        <div class="field"><label for="tEst">Estimate</label><input id="tEst" type="number" step="any" placeholder="0.65"></div>
+        <div class="field"><label for="tLow">95% CI lower</label><input id="tLow" type="number" step="any" placeholder="0.51"></div>
+        <div class="field"><label for="tUp">95% CI upper</label><input id="tUp" type="number" step="any" placeholder="0.84"></div>
+        <div class="field" style="flex:2 1 200px"><label for="tSource">Source</label><input id="tSource" placeholder="e.g. Butler et al., NEJM 2024"></div>
+      </div>
+    </section>
+
+    <div class="form-foot">
+      <div style="display:flex;gap:8px"><button type="submit">Save trial</button><button type="button" class="ghost" id="cancelTrial">Cancel</button></div>
+      <button type="button" class="ghost danger hidden" id="deleteTrial">Delete trial</button>
+    </div>
+  </form>
+
+  <!-- 2. Set up runs for that trial + latest answer -->
+  <div class="step-title" id="step2"><span class="num">2</span><h2>Runs for <span id="formTrial">–</span></h2></div>
   <div class="grid">
     <form class="panel" id="form">
-      <div class="field">
-        <label for="name">Case name (optional)</label>
-        <input id="name" list="nameList" autocomplete="off" placeholder="e.g. simple prompt, simple prompt + web search, prompt with leveraged knowledge">
-        <datalist id="nameList"></datalist>
-      </div>
-      <div class="field">
-        <label for="system">System instructions (optional)</label>
-        <textarea id="system" placeholder="e.g. You are an expert oncologist helping to elicit a prior distribution…"></textarea>
-      </div>
-      <div class="field">
-        <label for="prompt">Prompt</label>
-        <textarea id="prompt" placeholder="Type your prompt here… (Ctrl+Enter to send)" required></textarea>
-      </div>
-      <div class="row">
-        <div class="field">
-          <label for="model">Model</label>
-          <select id="modelSelect"></select>
-          <input id="model" class="hidden" autocomplete="off" placeholder="Model name, e.g. gpt-4o-2024-08-06" style="margin-top:6px">
+      <section class="sect">
+        <h3>Prompt</h3>
+        <div class="parts">
+          <span class="muted">Build it from:</span>
+          <label class="check"><input type="checkbox" id="inclName" checked> Trial name &amp; NCT</label>
+          <label class="check"><input type="checkbox" id="inclSummary" checked> Trial summary</label>
+          <label class="check"><input type="checkbox" id="inclPower"> Sample-size assumption</label>
         </div>
-        <div class="field">
-          <label for="effort">Reasoning effort</label>
-          <select id="effort">
-            <option value="">Model default</option>
-            <option value="none">none</option>
-            <option value="minimal">minimal</option>
-            <option value="low">low</option>
-            <option value="medium">medium</option>
-            <option value="high">high</option>
-            <option value="xhigh">xhigh</option>
-          </select>
+        <p class="muted hidden" id="partsHint"></p>
+        <textarea id="prompt" placeholder="Filled in from the trial; you can edit it. (Ctrl+Enter to start)" required></textarea>
+        <div class="under"><button type="button" class="ghost" id="rebuildPrompt" title="Replace the prompt with one built from the trial">Rebuild from trial</button></div>
+      </section>
+
+      <section class="sect">
+        <h3>System instructions</h3>
+        <textarea id="system" placeholder="e.g. You are a clinical trial biostatistician…"></textarea>
+      </section>
+
+      <section class="sect">
+        <h3>Model</h3>
+        <div class="row">
+          <div class="field">
+            <label for="modelSelect">Model</label>
+            <select id="modelSelect"></select>
+            <input id="model" class="hidden" autocomplete="off" placeholder="Model name" style="margin-top:6px">
+          </div>
+          <div class="field">
+            <label for="effort">Reasoning effort</label>
+            <select id="effort">
+              <option value="">Model default</option><option value="none">none</option><option value="minimal">minimal</option>
+              <option value="low">low</option><option value="medium">medium</option><option value="high">high</option>
+              <option value="xhigh">xhigh</option><option value="max">max (Claude only)</option>
+            </select>
+          </div>
+          <div class="field" id="tempField">
+            <label for="temperature">Temperature</label>
+            <input id="temperature" type="number" min="0" max="2" step="0.1" placeholder="not for gpt-5 or Claude">
+          </div>
         </div>
-        <div class="field" id="tempField">
-          <label for="temperature">Temperature (blank = default)</label>
-          <input id="temperature" type="number" min="0" max="2" step="0.1" placeholder="not for gpt-5 models">
+        <div class="checks">
+          <label class="check"><input type="checkbox" id="reasoning" checked> Show reasoning summary</label>
+          <label class="check"><input type="checkbox" id="webSearch"> Web search</label>
         </div>
-      </div>
-      <label class="check"><input type="checkbox" id="reasoning" checked> Show reasoning summary (reasoning models only)</label>
-      <label class="check"><input type="checkbox" id="webSearch"> Web search</label>
-      <p class="warn hidden" id="webWarn">Web search is on. The model can find published trial results, which leaks them into the prior.
-        Each search costs $0.01, included in the cost shown. Queries and sources are logged.</p>
-      <button type="submit" id="send">Send</button>
-      <span class="muted" id="status"></span>
+        <p class="warn hidden" id="webWarn">Web search is on. The model can find published trial results, which leaks them into the prior.
+          Each search costs $0.01, included in the cost shown. Queries and sources are logged.</p>
+        <details class="extra">
+          <summary class="muted">Extra files sent with every run <span id="fileCount"></span> (rarely needed: use the trial's protocol/SAP summary instead)</summary>
+          <div class="drop" id="drop" style="margin-top:8px">
+            <button type="button" class="ghost" id="pickFiles">Attach files…</button>
+            <span class="muted">or drop them here (PDF, Word, or text)</span>
+            <input type="file" id="fileInput" multiple accept=".pdf,.docx,.doc,.txt,.md,.csv,.tsv,.json,.xml,.html,.tex,.r,.py,.sas,.yaml,.yml">
+            <ul class="files" id="fileList"></ul>
+          </div>
+          <p class="muted" style="margin:6px 0 0">The full text is sent with every run (costly for long documents). Not kept after a page reload.</p>
+        </details>
+      </section>
+
+      <section class="sect">
+        <h3>Runs</h3>
+        <div class="row">
+          <div class="field" style="flex:2 1 220px">
+            <label for="series">Series</label>
+            <input id="series" list="seriesList" autocomplete="off" placeholder="e.g. Claude v2 (runs with the same setup)">
+            <datalist id="seriesList"></datalist>
+          </div>
+          <div class="field" style="flex:0 1 90px"><label for="runs">Runs</label><input id="runs" type="number" min="1" max="200" step="1" value="1"></div>
+          <div class="field" style="flex:0 1 150px" id="intervalField"><label for="interval">Minutes between</label><input id="interval" type="number" min="0" step="0.5" value="5"></div>
+        </div>
+        <p class="muted" id="runsHint"></p>
+        <div class="start"><button type="submit" id="send">Start run</button><span class="muted" id="status"></span></div>
+      </section>
     </form>
 
-    <div class="panel">
-      <div class="error hidden" id="error"></div>
+    <div class="panel answer-panel">
+      <div class="batch hidden" id="batchBox">
+        <div class="top"><b id="batchTitle"></b><button type="button" class="ghost" id="batchStop">Stop</button></div>
+        <div class="bar"><div id="batchBar"></div></div>
+        <div id="batchText" class="muted"></div>
+        <ul id="batchErrors"></ul>
+      </div>
       <div class="section">
         <div class="head">
-          <h2>Answer</h2>
+          <h2>Answer <span class="muted" id="answerOf"></span></h2>
           <div class="actions">
             <label class="check"><input type="checkbox" id="raw"> Show raw text</label>
             <button type="button" class="ghost" id="copyAnswer">Copy</button>
           </div>
         </div>
-        <div class="md" id="answer"><p class="muted">The output will appear here.</p></div>
+        <div class="md" id="answer"><p class="muted">The latest answer appears here. Click a run in step 3 to show it here.</p></div>
       </div>
-      <div class="section hidden" id="reasoningBox">
-        <h2>Reasoning (summary)</h2>
-        <div class="md" id="reasoningText"></div>
-      </div>
-      <div class="section hidden" id="webBox">
-        <h2>Web search</h2>
-        <div id="webText"></div>
-      </div>
+      <div class="section hidden" id="reasoningBox"><h2>Reasoning (summary)</h2><div class="md" id="reasoningText"></div></div>
+      <div class="section hidden" id="webBox"><h2>Web search</h2><div id="webText"></div></div>
       <div class="stats" id="stats"></div>
     </div>
   </div>
 
-  <div class="panel" style="margin-top:20px">
-    <h2>Recent calls</h2>
-    <div class="history-tools">
-      <input id="filter" list="nameList" autocomplete="off" placeholder="Filter by case name… (searches the whole log)">
+  <!-- 3. All runs of the trial: plot + table grouped by series -->
+  <div class="step-title" id="step3"><span class="num">3</span><h2>Results</h2></div>
+  <div class="panel" id="resultsPanel">
+    <div class="results-head">
+      <h2 id="resultsTitle" style="margin:0">Runs</h2>
+      <span class="muted" id="resultsNote"></span>
     </div>
     <div class="copybar">
-      <button type="button" class="ghost" id="selectShown">Select all shown</button>
-      <button type="button" id="copySelected" disabled>Copy selected (0)</button>
-      <button type="button" class="ghost" id="clearSelected">Clear selection</button>
-      <label class="check"><input type="checkbox" id="incPrompt" checked> include prompts</label>
-      <label class="check"><input type="checkbox" id="incReasoning"> include reasoning</label>
-      <label class="check"><input type="checkbox" id="incSources"> include web sources</label>
+        <button type="button" id="copySelected" disabled>Copy selected (0)</button>
+        <button type="button" class="ghost" id="clearSelected">Clear selection</button>
+        <label class="check"><input type="checkbox" id="incPrompt" checked> include prompts</label>
+        <label class="check"><input type="checkbox" id="incReasoning"> include reasoning</label>
+        <label class="check"><input type="checkbox" id="incSources"> include web sources</label>
+      </div>
+    <div id="trialResults">
+      <div id="plotBox" class="hidden">
+        <div id="plotScaleRow" class="muted" style="margin:0 0 6px">x axis:
+          <select id="plotScale" title="How a ratio (HR, OR, RR) is shown on the x axis">
+            <option value="hr">HR values, log-spaced axis</option>
+            <option value="log">log HR values</option>
+            <option value="lin">HR values, linear axis</option>
+          </select></div>
+        <div class="legend" id="legend"></div>
+        <div class="chart" id="chart"></div>
+        <p class="muted" style="margin:6px 0 0">Thin lines: each run's prior; thick lines: the series' runs pooled (equal-weight mixture).
+          Choose how ratios are shown with "x axis". On a linear axis the same priors look skewed. Hover for the probability, under each pooled prior, that the effect is below that value.
+          Untick a series in the table to hide it.</p>
+      </div>
+      <div id="runsTable"><span class="muted">Loading…</span></div>
     </div>
-    <div id="history"><span class="muted">Loading…</span></div>
+    <div id="looseCalls" class="hidden">
+      <div class="history-tools"><input id="filter" autocomplete="off" placeholder="Filter by case name…"></div>
+      <div id="history"></div>
+    </div>
   </div>
 </div>
 
@@ -216,20 +463,23 @@
   };
   const secs = (x) => x == null ? "n/a" : Number(x).toFixed(1) + " s";
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const NO_TRIAL = "__none";
+  function showError(msg) { $("error").textContent = msg; $("error").classList.toggle("hidden", !msg); }
 
-  // Keep the last-used inputs between page reloads.
+  // ---------------------------------------------------------------- saved inputs
   const saved = (() => { try { return JSON.parse(localStorage.getItem("playground") || "{}"); } catch { return {}; } })();
   function save() {
     try {
       localStorage.setItem("playground", JSON.stringify({
-        name: $("name").value, system: $("system").value, prompt: $("prompt").value, model: $("model").value,
-        temperature: $("temperature").value, effort: $("effort").value, reasoning: $("reasoning").checked, webSearch: $("webSearch").checked,
+        trial: $("trialSelect").value, series: $("series").value, system: $("system").value, prompt: $("prompt").value,
+        inclName: $("inclName").checked, inclSummary: $("inclSummary").checked, inclPower: $("inclPower").checked,
+        model: $("model").value, temperature: $("temperature").value, effort: $("effort").value,
+        reasoning: $("reasoning").checked, webSearch: $("webSearch").checked, runs: $("runs").value, interval: $("interval").value,
       }));
     } catch {}
   }
 
-  // The dropdown lists known models; "Other…" reveals a text box for any other model name.
-  // #model always holds the model that will be sent.
+  // ---------------------------------------------------------------- models
   function setModel(name) {
     const known = [...$("modelSelect").options].some((o) => o.value === name);
     $("modelSelect").value = known ? name : "__other";
@@ -243,37 +493,360 @@
     if (other) $("model").focus();
     save();
   });
-
   function syncTemp() { $("tempField").style.opacity = $("reasoning").checked ? 0.4 : 1; $("temperature").disabled = $("reasoning").checked; }
+  function syncWeb() { $("webWarn").classList.toggle("hidden", !$("webSearch").checked); }
 
-  async function init() {
-    const info = await fetch("/api/info").then((r) => r.json());
-    $("modelSelect").innerHTML =
-      info.models.map((m) => `<option value="${esc(m)}">${esc(m)}${m === info.default_model ? " (default)" : ""}</option>`).join("") +
-      '<option value="__other">Other…</option>';
-    setModel(saved.model || info.default_model);
-    $("name").value = saved.name || "";
-    $("system").value = saved.system || "";
-    $("prompt").value = saved.prompt || "";
-    $("temperature").value = saved.temperature || "";
-    $("effort").value = saved.effort || "";
-    $("reasoning").checked = saved.reasoning ?? true;
-    $("webSearch").checked = saved.webSearch ?? false;
-    syncWeb();
-    $("total").textContent = money(info.total_cost);
-    if (window.EXPORT) {
-      document.body.classList.add("export");
-      document.querySelector("header .muted").textContent = window.EXPORT.note;
-      $("answer").innerHTML = '<p class="muted">Click “Show here” on a call below to view it in this panel.</p>';
-    }
-    syncTemp();
-    loadHistory();
+  // ---------------------------------------------------------------- trials
+  let trials = [];
+  const trialById = (id) => trials.find((t) => t.id === id);
+  const currentTrial = () => trialById($("trialSelect").value);
+  // The prompt is built from the ticked parts: trial name & NCT, the trial summary (from the protocol/SAP)
+  // and the protocol's sample-size assumption. Parts the trial does not have are left out.
+  const DOC_LABEL = { protocol: "protocol", sap: "statistical analysis plan", other: "trial documents" };
+  function docsLabel(t) {
+    const kinds = [...new Set((t.documents || []).map((d) => DOC_LABEL[d.kind] || "trial documents"))];
+    return kinds.length ? kinds.join(" and ") : "trial documents";
+  }
+  function promptParts(t) {
+    const s = t && t.summary;
+    const parts = { name: !!t && $("inclName").checked, summary: !!s && $("inclSummary").checked, power: !!(s && s.power) && $("inclPower").checked };
+    if (t && !parts.name && !parts.summary) parts.name = true;  // something has to say which trial it is
+    return parts;
+  }
+  function autoPrompt(t) {
+    if (!t) return "";
+    const p = promptParts(t), out = [];
+    if (p.name) out.push(`The trial is ${t.name}${t.nct ? ` (${t.nct})` : ""}.`);
+    if (p.summary) out.push(`${p.name ? "Its" : "The trial's"} design, as described in the ${docsLabel(t)}:\n\n${t.summary.text}`);
+    if (p.power) out.push(`Sample-size assumption in the ${docsLabel(t)}: ${t.summary.power}`);
+    return out.join("\n\n");
+  }
+  function syncParts() {
+    const t = currentTrial(), s = t && t.summary;
+    $("inclSummary").disabled = !s;
+    $("inclPower").disabled = !(s && s.power);
+    const p = promptParts(t), hint = [];
+    if (t && !s) hint.push("This trial has no summary yet (Edit trial → Protocol / SAP), so the prompt only names it.");
+    else if (t && !$("inclName").checked && !p.summary) hint.push("Without a summary the trial has to be named.");
+    if (t && s && !p.name) hint.push("Blinded: the model gets the design but not the trial's name or NCT number.");
+    if (t && s && s.results_warning) hint.push("⚠ The extraction flagged possible hints at results in the documents; see the trial details.");
+    $("partsHint").textContent = hint.join(" ");
+    $("partsHint").classList.toggle("hidden", !hint.length);
+  }
+  // A prompt is "filled in" (replaced when the trial or the ticked parts change) if it is empty, the last
+  // generated one, or any one-line "The trial is …" prompt (e.g. reused from an earlier run).
+  const isAuto = (p) => !p || p === previousAuto.trim() || /^The trial is [^\n]*$/.test(p);
+  function refreshPrompt(force = false) {
+    const t = currentTrial();
+    syncParts();
+    if (t && (force || isAuto($("prompt").value.trim()))) $("prompt").value = autoPrompt(t);
+    previousAuto = autoPrompt(t);
+  }
+  ["inclName", "inclSummary", "inclPower"].forEach((id) => $(id).addEventListener("change", () => { refreshPrompt(); save(); }));
+  $("rebuildPrompt").addEventListener("click", () => {
+    const p = $("prompt").value.trim();
+    if (!isAuto(p) && !confirm("Replace the prompt you wrote with one built from the trial?")) return;
+    refreshPrompt(true); save();
+  });
+
+  async function loadTrials(selectId) {
+    trials = (await fetch("/api/trials").then((r) => r.json())).trials || [];
+    const keep = selectId ?? $("trialSelect").value ?? saved.trial;
+    $("trialSelect").innerHTML =
+      (trials.length ? "" : '<option value="" disabled>No trials yet: create one</option>') +
+      trials.map((t) => `<option value="${esc(t.id)}">${esc(t.name)}${t.nct ? " · " + esc(t.nct) : ""} (${t.runs} run${t.runs === 1 ? "" : "s"})</option>`).join("") +
+      `<option value="${NO_TRIAL}">Calls without a trial (older calls)</option>`;
+    $("trialSelect").value = trialById(keep) || keep === NO_TRIAL ? keep : (trials[0] ? trials[0].id : NO_TRIAL);
   }
 
-  function syncWeb() { $("webWarn").classList.toggle("hidden", !$("webSearch").checked); }
-  $("webSearch").addEventListener("change", () => { syncWeb(); save(); });
+  let previousAuto = "";
+  // ---------------------------------------------------------------- trial details (always visible)
+  // "Looked up <when> by <model> · <cost>", like the trial summary's "Extracted … by …" line.
+  const lookupMeta = (d) => `Looked up ${esc(new Date(d.timestamp || Date.now()).toLocaleString())} by ${esc(d.model || "unknown model")}` +
+    (d.cost != null ? " · " + money(d.cost) : "");
+  const ciText = (r) => r.lower != null ? ` (${r.ci_level || 95}% CI ${r.lower}–${r.upper})` : "";
+  async function fetchSavedLookup(t) {
+    try {
+      const res = await fetch(`/api/trials/lookup?nct=${encodeURIComponent(t.nct || "")}&name=${encodeURIComponent(t.name || "")}`);
+      return res.ok ? (await res.json()).lookup : null;  // not ok: a server started before this feature
+    } catch { return null; }
+  }
+  let infoFor = null;
+  async function showTrialInfo(t) {
+    $("trialInfo").classList.toggle("hidden", !t);
+    if (!t) return;
+    infoFor = t.id;
+    const r = t.result;
+    const base =
+      `<div><b>${esc(t.name)}</b>${t.nct ? ` · <a href="https://clinicaltrials.gov/study/${encodeURIComponent(t.nct)}" target="_blank" rel="noopener">${esc(t.nct)}</a>` : ""}</div>` +
+      (t.notes ? `<div>${esc(t.notes)}</div>` : "") +
+      ((t.documents || []).length ? `<div><b>Documents:</b> ${t.documents.map((d) => `${esc(KIND_NAME[d.kind] || d.kind)} (${esc(d.filename)})`).join(", ")}</div>` : "") +
+      (t.summary
+        ? `<details style="margin:4px 0"><summary style="cursor:pointer"><b>Trial summary</b> <span class="muted">${esc(t.summary.model || "")}` +
+          `${t.summary.created ? ", " + esc(new Date(t.summary.created).toLocaleDateString()) : ""}${t.summary.edited ? ", edited" : ""}</span></summary>` +
+          `<pre style="margin-top:6px">${esc(t.summary.text)}${t.summary.power ? "\n\nSample-size assumption: " + esc(t.summary.power) : ""}</pre></details>` +
+          (t.summary.results_warning ? `<div class="warn" style="margin:4px 0"><b>Possible hints at results in the documents:</b> ${esc(t.summary.results_warning)}</div>` : "")
+        : "") +
+      (r && r.estimate != null
+        ? `<div><b>Reported result (used in the plot):</b> ${esc((r.measure || "").replace("_", " "))} ${r.estimate}${ciText(r)}${r.source ? " · " + esc(r.source) : ""}</div>`
+        : `<div class="warn" style="margin-top:6px">No reported result saved, so the plot has no reference line. Use Edit trial → pick a result from the lookup → Save trial.</div>`);
+    $("trialInfoBody").innerHTML = base + '<div class="muted">Loading the last lookup…</div>';
+    const d = await fetchSavedLookup(t);
+    if (infoFor !== t.id) return;  // another trial was selected meanwhile
+    if (!d) { $("trialInfoBody").innerHTML = base + '<div class="muted">No lookup yet. Use Edit trial → "Look up the reported result".</div>'; return; }
+    const reg = d.registry;
+    $("trialInfoBody").innerHTML = base +
+      `<div style="margin-top:8px" class="muted">${lookupMeta(d)}</div>` +
+      (reg ? `<div><b>Registry:</b> ${esc(reg.acronym ? reg.acronym + " · " : "")}${esc(reg.title || "")}${reg.status ? " · " + esc(reg.status) : ""}${reg.has_posted_results ? " · results posted on ClinicalTrials.gov" : ""}</div>` : "") +
+      (d.summary ? `<div><b>Summary:</b> ${esc(d.summary)}</div>` : "") +
+      (d.results.length ? `<div><b>Primary result${d.results.length > 1 ? "s" : ""} found:</b></div>` +
+        d.results.map((x) => {
+          const used = r && r.estimate === x.estimate && r.lower === x.lower && r.upper === x.upper;
+          return `<div style="margin-left:12px">${used ? "✓ " : "· "}${x.label ? `<b>${esc(x.label)}</b>: ` : ""}${esc(x.measure.replace("_", " "))} ${x.estimate}${ciText(x)}` +
+            `${x.source ? " · " + esc(x.source) : ""}${x.url ? ` · <a href="${esc(x.url)}" target="_blank" rel="noopener">link</a>` : ""}${used ? ' <span class="muted">(saved)</span>' : ""}</div>`;
+        }).join("")
+        : `<div>No published primary result found.</div>`) +
+      (d.comment ? `<div class="muted">${esc(d.comment)}</div>` : "");
+  }
+  // remember whether the panel is open or folded
+  try { if (localStorage.getItem("playgroundTrialInfoOpen") === "0") $("trialInfo").open = false; } catch {}
+  $("trialInfo").addEventListener("toggle", () => { try { localStorage.setItem("playgroundTrialInfoOpen", $("trialInfo").open ? "1" : "0"); } catch {} });
 
-  // Queries, cited sources and all consulted pages of a logged call, as HTML ("" if search was off).
+  function onTrialChange(adopt = false) {
+    const t = currentTrial();
+    $("editTrial").disabled = !t;
+    $("formTrial").textContent = t ? t.name : "–";
+    $("trialMeta").textContent = "";  // the details panel below shows the NCT number and notes
+    showTrialInfo(t);
+    refreshPrompt();  // fill the prompt from the trial, unless it was written by hand
+    $("seriesList").innerHTML = t ? Object.keys(t.series_counts || {}).filter(Boolean).map((s) => `<option value="${esc(s)}">`).join("") : "";
+    $("send").disabled = !t || batchRunning;
+    syncRuns();
+    save();
+    loadResults(adopt);
+    // An open edit form follows the selected trial (with that trial's last lookup).
+    if (t && !$("trialForm").classList.contains("hidden") && $("trialForm").dataset.id && $("trialForm").dataset.id !== t.id) openTrialForm(t);
+  }
+  $("trialSelect").addEventListener("change", () => {
+    if (document.body.classList.contains("creating")) closeTrialForm();  // picking a trial ends "new trial"
+    onTrialChange(true);
+  });
+
+  function closeTrialForm() {
+    $("trialForm").classList.add("hidden");
+    document.body.classList.remove("creating");
+  }
+  function openTrialForm(t) {
+    $("trialForm").classList.remove("hidden");
+    document.body.classList.toggle("creating", !t);  // a new trial starts from scratch: hide the selected one
+    $("trialFormTitle").textContent = t ? `Edit ${t.name}` : "New clinical trial";
+    $("deleteTrial").classList.toggle("hidden", !t);
+    $("trialForm").dataset.id = t ? t.id : "";
+    const r = (t && t.result) || {};
+    $("tName").value = t ? t.name : ""; $("tNct").value = t ? t.nct : ""; $("tNotes").value = t ? t.notes : "";
+    $("tMeasure").value = r.measure || "HR"; $("tEst").value = r.estimate ?? ""; $("tLow").value = r.lower ?? ""; $("tUp").value = r.upper ?? "";
+    $("tSource").value = r.source || "";
+    formDocs = [...((t && t.documents) || [])];
+    formSummary = t && t.summary ? { ...t.summary } : null;
+    $("tSummary").value = formSummary ? formSummary.text : "";
+    $("tPower").value = formSummary ? formSummary.power || "" : "";
+    $("extractStatus").textContent = "One call, logged and costed, but not a run.";
+    drawDocs(); drawSummaryMeta();
+    $("docsBox").open = !t || !!(formDocs.length || formSummary);
+    $("lookupBox").classList.add("hidden");
+    $("lookupStatus").textContent = "Reads ClinicalTrials.gov, then asks this model (with web search). Logged and costed, but not a run.";
+    lookupFor = null;
+    if (t) loadSavedLookup(t);
+    $("tName").focus();
+  }
+
+  // Look up the trial's reported primary result (ClinicalTrials.gov + one model call with web search).
+  let lookupResults = [];
+  let lookupFor = null;  // the trial whose saved lookup is being fetched (ignore it if the form moved on)
+  // saved = shown from the log when the form opened; its result is already in the fields if it was saved.
+  function renderLookup(d, saved) {
+    lookupResults = d.results;
+    const reg = d.registry;
+    const ci = (r) => r.lower != null ? ` (${r.ci_level || 95}% CI ${r.lower}–${r.upper})` : " (no CI)";
+    const cur = Number($("tEst").value);
+    $("lookupBox").innerHTML =
+      `<div class="muted" style="margin-bottom:4px">${lookupMeta(d)}${saved ? ". Click “Look up the reported result” again to refresh it." : ""}</div>` +
+      (reg ? `<div><b>Registry:</b> ${esc(reg.acronym ? reg.acronym + " · " : "")}${esc(reg.title)} · ${esc(reg.status)}${reg.has_posted_results ? " · results posted on ClinicalTrials.gov" : ""}</div>`
+           : saved ? "" : `<div class="warn">ClinicalTrials.gov not read${d.registry_error ? ": " + esc(d.registry_error) : ""}; the model searched by name only.</div>`) +
+      (d.summary ? `<div><b>Summary:</b> ${esc(d.summary)}</div>` : "") +
+      (d.results.length ? `<div style="margin-top:6px"><b>Primary result${d.results.length > 1 ? "s (click one to use it)" : ""}:</b></div>` +
+        d.results.map((r, i) => `<div style="margin:4px 0"><button type="button" data-pick="${i}" class="${saved && r.estimate === cur ? "" : "ghost"}">${esc(r.label || "Use")}</button>
+          ${esc(r.measure.replace("_", " "))} ${r.estimate}${ci(r)} · ${esc(r.source)}${r.url ? ` · <a href="${esc(r.url)}" target="_blank" rel="noopener">link</a>` : ""}</div>`).join("")
+        : `<div class="warn">No published primary result found.</div>`) +
+      (d.comment ? `<div class="muted" style="margin-top:4px">${esc(d.comment)}</div>` : "") +
+      `<div class="muted" style="margin-top:4px">Check the numbers against the source before saving.</div>`;
+    $("lookupBox").classList.remove("hidden");
+    $("lookupBox").querySelectorAll("[data-pick]").forEach((b) => b.addEventListener("click", () => fillResult(Number(b.dataset.pick))));
+  }
+  async function loadSavedLookup(t) {
+    const key = t.id;
+    lookupFor = key;
+    const d = await fetchSavedLookup(t);
+    if (lookupFor === key && d) renderLookup(d, true);
+  }
+  function fillResult(i) {
+    const r = lookupResults[i];
+    $("tMeasure").value = r.measure; $("tEst").value = r.estimate;
+    $("tLow").value = r.lower ?? ""; $("tUp").value = r.upper ?? "";
+    $("tSource").value = [r.label, r.source].filter(Boolean).join(" · ");
+    document.querySelectorAll("#lookupBox [data-pick]").forEach((b) => b.classList.toggle("ghost", Number(b.dataset.pick) !== i));
+  }
+  $("lookupBtn").addEventListener("click", async () => {
+    const nct = $("tNct").value.trim(), name = $("tName").value.trim();
+    if (!nct && !name) return showError("Give the trial name or NCT number first.");
+    showError("");
+    $("lookupBtn").disabled = true;
+    $("lookupStatus").textContent = "Looking up… (web search can take a minute)";
+    try {
+      const res = await fetch("/api/trials/lookup", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nct, name, model: $("lookupModel").value }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || res.statusText);
+      lookupFor = null;  // a fresh lookup replaces any saved one still loading
+      renderLookup(d, false);
+      const reg = d.registry;
+      if (d.results.length) fillResult(0);
+      if (!$("tNotes").value.trim() && d.summary) $("tNotes").value = d.summary;
+      if (!name && reg && reg.acronym) $("tName").value = reg.acronym;
+      $("lookupStatus").textContent = "Done. Review the fields below, then Save trial.";
+    } catch (err) {
+      $("lookupStatus").textContent = "";
+      showError("Lookup failed: " + err.message);
+    } finally {
+      $("lookupBtn").disabled = false;
+    }
+  });
+  // ---------------------------------------------------------------- protocol / SAP and the trial summary
+  let formDocs = [];       // documents of the trial being edited: {kind, filename, sha256, markdown_file, chars, ...}
+  let formSummary = null;  // the summary's details (model, versions, warnings, ...); its text is in #tSummary / #tPower
+  const KIND_NAME = { protocol: "Protocol", sap: "SAP", other: "Other" };
+  function drawDocs() {
+    $("docList").innerHTML = formDocs.map((d, i) =>
+      `<li><span><b>${KIND_NAME[d.kind] || d.kind}</b> · ${esc(d.filename)} <span class="muted">${size(d.bytes || 0)} · about ${Math.round((d.chars || 0) / 4).toLocaleString()} tokens as text</span></span>` +
+      `<button type="button" class="ghost" data-remove-doc="${i}">Remove</button></li>`).join("");
+    $("docsCount").textContent = [formDocs.length ? `${formDocs.length} document${formDocs.length > 1 ? "s" : ""}` : "",
+      formSummary || $("tSummary").value.trim() ? "summary saved" : ""].filter(Boolean).join(" · ");
+    $("extractBtn").disabled = !formDocs.length;
+  }
+  function drawSummaryMeta() {
+    const s = formSummary;
+    if (!s || !s.created) { $("summaryMeta").innerHTML = ""; return; }
+    const stale = (s.documents || []).join() !== formDocs.map((d) => d.sha256).join();
+    $("summaryMeta").innerHTML =
+      `<div class="muted">Extracted ${esc(new Date(s.created).toLocaleString())} by ${esc(s.model)}${s.cost != null ? " · " + money(s.cost) : ""}${s.edited ? " · edited by hand since" : ""}</div>` +
+      (stale ? `<div class="warn" style="margin:4px 0">The documents changed since this summary was extracted. Extract it again, or keep it as it is.</div>` : "") +
+      (s.results_warning ? `<div class="warn" style="margin:4px 0"><b>Possible hints at results:</b> ${esc(s.results_warning)}</div>` : "") +
+      (s.identifiers ? `<div><b>Identifiers (not in the summary):</b> ${esc(s.identifiers)}</div>` : "") +
+      (s.document_versions ? `<div><b>Documents read:</b> ${esc(s.document_versions)}</div>` : "") +
+      (s.notes ? `<div><b>Notes:</b> ${esc(s.notes)}</div>` : "");
+  }
+  async function uploadDocs(list) {
+    showError("");
+    for (const file of [...list]) {
+      $("docStatus").textContent = `Converting ${file.name}… (a long PDF takes a while)`;
+      try {
+        const res = await fetch("/api/documents", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: file.name, kind: $("docKind").value, data: await toBase64(file) }),
+        });
+        const d = await res.json();
+        if (!res.ok) throw new Error(d.error || res.statusText);
+        formDocs = formDocs.filter((x) => x.sha256 !== d.document.sha256).concat(d.document);
+      } catch (err) {
+        showError(`Upload of ${file.name} failed: ${err.message}`);
+      }
+    }
+    $("docStatus").textContent = "or drop it here (PDF, Markdown or text)";
+    drawDocs(); drawSummaryMeta();
+  }
+  $("pickDocs").addEventListener("click", () => $("docInput").click());
+  $("docInput").addEventListener("change", async () => { await uploadDocs($("docInput").files); $("docInput").value = ""; });
+  $("docDrop").addEventListener("dragover", (e) => { e.preventDefault(); $("docDrop").classList.add("over"); });
+  $("docDrop").addEventListener("dragleave", () => $("docDrop").classList.remove("over"));
+  $("docDrop").addEventListener("drop", (e) => { e.preventDefault(); $("docDrop").classList.remove("over"); uploadDocs(e.dataTransfer.files); });
+  $("docList").addEventListener("click", (e) => {
+    if (e.target.dataset.removeDoc === undefined) return;
+    formDocs.splice(Number(e.target.dataset.removeDoc), 1);
+    drawDocs(); drawSummaryMeta();
+  });
+  ["tSummary", "tPower"].forEach((id) => $(id).addEventListener("input", () => {
+    if (formSummary && formSummary.created && !formSummary.edited) { formSummary.edited = true; drawSummaryMeta(); }
+  }));
+  $("extractBtn").addEventListener("click", async () => {
+    if (!formDocs.length) return showError("Upload the protocol and/or SAP first.");
+    if ($("tSummary").value.trim() && !confirm("Replace the current trial summary with a newly extracted one?")) return;
+    showError("");
+    $("extractBtn").disabled = true;
+    const started = Date.now();
+    const timer = setInterval(() => { $("extractStatus").textContent = `Reading the documents… ${((Date.now() - started) / 1000).toFixed(0)} s`; }, 500);
+    try {
+      const res = await fetch("/api/summary/extract", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documents: formDocs, model: $("extractModel").value, name: $("tName").value.trim() }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || res.statusText);
+      formSummary = d.summary;
+      $("tSummary").value = formSummary.text;
+      $("tPower").value = formSummary.power || "";
+      const nct = (formSummary.identifiers || "").match(/NCT\d{8}/);
+      if (!$("tNct").value.trim() && nct) $("tNct").value = nct[0];
+      $("extractStatus").textContent = "Done. Check the summary against the documents, edit it if needed, then Save trial.";
+    } catch (err) {
+      $("extractStatus").textContent = "";
+      showError("Extraction failed: " + err.message);
+    } finally {
+      clearInterval(timer);
+      drawDocs(); drawSummaryMeta();
+    }
+  });
+  function summaryForSave() {
+    const text = $("tSummary").value.trim();
+    if (!text) return null;
+    return { ...(formSummary || { edited: true, created: new Date().toISOString(), model: "written by hand", documents: [] }),
+             text, power: $("tPower").value.trim() };
+  }
+
+  $("newTrial").addEventListener("click", () => openTrialForm(null));
+  $("editTrial").addEventListener("click", () => currentTrial() && openTrialForm(currentTrial()));
+  $("cancelTrial").addEventListener("click", closeTrialForm);
+  $("trialForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const res = await fetch("/api/trials", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: $("trialForm").dataset.id || undefined, name: $("tName").value, nct: $("tNct").value, notes: $("tNotes").value,
+        result: { measure: $("tMeasure").value, estimate: $("tEst").value, lower: $("tLow").value, upper: $("tUp").value, source: $("tSource").value },
+        documents: formDocs, summary: summaryForSave(),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) return showError(data.error || res.statusText);
+    const isNew = !$("trialForm").dataset.id;
+    showError("");
+    closeTrialForm();
+    await loadTrials(data.trial.id);
+    onTrialChange(isNew);  // a new trial starts with an empty answer panel
+  });
+  $("deleteTrial").addEventListener("click", async () => {
+    const t = trialById($("trialForm").dataset.id);
+    if (!t || !confirm(`Delete the trial “${t.name}”? Its ${t.runs} logged run(s) stay in the log and show under “Calls without a trial”.`)) return;
+    const res = await fetch("/api/trials/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: t.id }) });
+    const data = await res.json();
+    if (!res.ok) return showError(data.error || res.statusText);
+    closeTrialForm();
+    await loadTrials(NO_TRIAL);
+    onTrialChange();
+  });
+
+  // ---------------------------------------------------------------- answer panel
   function webHtml(call) {
     if (!call || !call.web_search) return "";
     const link = (url, title) => `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(title || url)}</a>`;
@@ -285,29 +858,25 @@
       <details><summary>All pages consulted (${seen.length})</summary>${list(seen.map((u) => link(u)))}</details>
     </div>`;
   }
-
   function showStats(call) {
     if (!call) { $("stats").innerHTML = ""; return; }
+    const p = priorOf(call);
     const items = [
-      ["Model", call.model_returned],
-      ["Effort", effortOf(call)],
-      ["Input tokens", call.input_tokens],
-      ["Output tokens", call.output_tokens],
-      ["Reasoning tokens", call.reasoning_tokens],
+      ...(p ? [["Prior", priorText(p) + (p.issues.length ? "  ⚠ " + p.issues.join(" ") : "")]] : []),
+      ["Model", call.model_returned], ["Effort", effortOf(call)],
+      ...(call.files ? [["Files", call.files.map((f) => f.filename).join(", ")]] : []),
+      ["Input tokens", call.input_tokens], ["Output tokens", call.output_tokens],
       ["Cost", money(call.cost_usd)],
       ...(call.web_search ? [["Searches", `${call.web_search_calls ?? "?"} (${money(call.web_search_cost_usd)} of the cost)`]] : []),
-      ["Time", call.seconds + " s"],
+      ["Time", secs(call.seconds)],
     ];
     $("stats").innerHTML = items.map(([k, v]) => `<span>${k}: <b>${esc(v)}</b></span>`).join("");
-    if (call.total_cost_usd != null) $("total").textContent = money(call.total_cost_usd);
+    if (call.total_cost_usd != null && !window.EXPORT) $("total").textContent = money(call.total_cost_usd);
   }
 
-  // ---- Markdown + LaTeX rendering ----
-  // Math is cut out before Markdown runs (Markdown would eat the backslashes in \( \) and \[ \]),
-  // then rendered with KaTeX and put back. Code spans are protected so math inside code stays literal.
+  // Markdown + LaTeX. Math is cut out before Markdown runs, then rendered with KaTeX and put back.
   const MATH = /\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|(?<![\\$\w])\$(?![\s\d])[^$\n]+?(?<!\s)\$(?!\w)/g;
   const CODE = /```[\s\S]*?```|`[^`\n]+`/g;
-
   function renderMarkdown(text) {
     if (!window.marked || !window.katex || !window.DOMPurify) return null;  // CDN not reachable
     const code = [];
@@ -319,120 +888,679 @@
       return `KATEXMATH${math.push({ tex, display }) - 1}END`;
     });
     src = src.replace(/\u0000C(\d+)\u0000/g, (_, i) => code[i]);
-    let html = DOMPurify.sanitize(marked.parse(src, { gfm: true, breaks: false }));
-    return html.replace(/KATEXMATH(\d+)END/g, (_, i) =>
-      katex.renderToString(math[i].tex, { displayMode: math[i].display, throwOnError: false }));
+    const html = DOMPurify.sanitize(marked.parse(src, { gfm: true, breaks: false }));
+    return html.replace(/KATEXMATH(\d+)END/g, (_, i) => katex.renderToString(math[i].tex, { displayMode: math[i].display, throwOnError: false }));
+  }
+  // ---------------------------------------------------------------- a JSON answer, readably
+  const LABELS = {
+    trial_identifier: "Trial", evidence_cutoff: "Evidence cutoff", experimental_arm: "Experimental arm",
+    control_arm: "Control arm", primary_endpoint: "Primary endpoint", effect_measure: "Effect measure",
+    benefit_direction: "Benefit direction", evidence_used: "Evidence used", clinical_rationale: "Clinical rationale",
+    awareness_of_target_trial_result: "Knows this trial's result", population_and_comparison: "Population and comparison",
+    reported_effect: "Reported effect", how_it_informs_the_prior: "How it informs the prior", first_public: "First public",
+    primary_results: "Primary results", ci_level: "CI level", url: "Link",
+  };
+  const nice = (k) => LABELS[k] || k.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
+  const textHtml = (s) => esc(s).replace(/\n/g, "<br>");
+  function valueHtml(v, key) {
+    if (v === null || v === undefined || v === "") return '<span class="muted">–</span>';
+    if (typeof v === "boolean") return v ? "yes" : "no";
+    if (key === "url" && /^https?:\/\//.test(v)) return `<a href="${esc(v)}" target="_blank" rel="noopener">${esc(v)}</a>`;
+    if (Array.isArray(v)) return v.every((x) => x === null || typeof x !== "object") ? esc(v.join(", ")) : v.map(cardHtml).join("");
+    if (typeof v === "object") return dlHtml(v);
+    return textHtml(v);
+  }
+  function dlHtml(obj, keys = Object.keys(obj)) {
+    keys = keys.filter((k) => k in obj);
+    return keys.length ? `<dl>${keys.map((k) => `<dt>${esc(nice(k))}</dt><dd>${valueHtml(obj[k], k)}</dd>`).join("")}</dl>` : "";
+  }
+  function cardHtml(item) {  // one entry of a list, e.g. a study in evidence_used
+    if (item === null || typeof item !== "object") return `<div class="ev">${valueHtml(item)}</div>`;
+    const titleKey = ["study", "label", "name", "title"].find((k) => typeof item[k] === "string");
+    const when = item.first_public ? ` <span class="when">· ${esc(item.first_public)}</span>` : "";
+    const rest = Object.keys(item).filter((k) => k !== titleKey && k !== "first_public");
+    return `<div class="ev">${titleKey ? `<b>${esc(item[titleKey])}</b>${when}` : ""}${dlHtml(item, rest)}</div>`;
+  }
+  function answerHtml(o) {
+    const used = new Set(), has = (k) => o[k] !== undefined && o[k] !== null && o[k] !== "";
+    const take = (k) => { used.add(k); return o[k]; };
+    let html = "";
+    if (has("trial_identifier")) html += `<h3>${esc(take("trial_identifier"))}</h3>`;
+    if (has("prior_median")) {  // the elicited prior
+      const n = (k) => has(k) ? esc(take(k)) : "?";
+      const m = has("effect_measure") ? esc(String(o.effect_measure).replace("_", " ")) + " " : "";
+      const stat = (big, small) => `<div class="stat"><b>${big}</b><span>${small}</span></div>`;
+      html += `<div class="stats">${stat(m + n("prior_median"), "prior median")}${stat(`${n("prior_p25")} – ${n("prior_p75")}`, "50% range (p25–p75)")}${stat(`${n("prior_p05")} – ${n("prior_p95")}`, "90% range (p5–p95)")}` +
+        (has("probability_experimental_better") ? stat(+(Number(take("probability_experimental_better")) * 100).toFixed(1) + "%", "P(experimental better)") : "") + "</div>";
+      if (has("benefit_direction")) html += `<p class="muted">${esc(take("benefit_direction"))}</p>`;
+    }
+    if (has("awareness_of_target_trial_result")) {
+      const a = take("awareness_of_target_trial_result");
+      html += `<p>Knows this trial's result: ${a === "none" ? esc(a) : `<span class="flag">${esc(a)}</span>`}</p>`;
+    }
+    const design = ["therapeutic_area", "population", "experimental_arm", "control_arm", "primary_endpoint", "effect_measure", "evidence_cutoff"].filter(has);
+    if (design.length) { html += `<h4>Trial design</h4>${dlHtml(o, design)}`; design.forEach((k) => used.add(k)); }
+    if (Array.isArray(o.evidence_used)) html += `<h4>Evidence used (${o.evidence_used.length})</h4>${take("evidence_used").map(cardHtml).join("")}`;
+    if (has("clinical_rationale")) html += `<h4>Clinical rationale</h4><p>${textHtml(take("clinical_rationale"))}</p>`;
+    for (const k of Object.keys(o).filter((k) => !used.has(k))) {  // anything else, e.g. a result lookup's fields
+      const v = o[k];
+      html += Array.isArray(v) && v.some((x) => x && typeof x === "object") ? `<h4>${esc(nice(k))}</h4>${valueHtml(v, k)}` : `<h4>${esc(nice(k))}</h4><p>${valueHtml(v, k)}</p>`;
+    }
+    return `<div class="ans">${html}</div>`;
   }
 
   const sources = new WeakMap();
   function draw(el) {
     const text = sources.get(el) ?? "";
+    // A JSON answer is shown readably; "Show raw text" shows it exactly as returned.
+    const obj = $("raw").checked ? null : answerJson(text);
+    if (obj) { el.classList.remove("raw"); el.innerHTML = answerHtml(obj); return; }
     const html = $("raw").checked ? null : renderMarkdown(text);
     el.classList.toggle("raw", html === null);
     if (html === null) el.textContent = text; else el.innerHTML = html;
   }
   function paint(el, text) { sources.set(el, text); draw(el); }
   $("raw").addEventListener("change", () => document.querySelectorAll(".md").forEach((el) => sources.has(el) && draw(el)));
-
-  function showResult(answer, reasoning, call) {
-    paint($("answer"), answer || "(empty answer)");
-    paint($("reasoningText"), reasoning || "");
-    $("reasoningBox").classList.toggle("hidden", !reasoning);
+  function showResult(call) {
+    paint($("answer"), (call && call.answer) || "(empty answer)");
+    paint($("reasoningText"), (call && call.reasoning_summary) || "");
+    $("reasoningBox").classList.toggle("hidden", !(call && call.reasoning_summary));
     $("webText").innerHTML = webHtml(call);
     $("webBox").classList.toggle("hidden", !(call && call.web_search));
+    $("answerOf").textContent = call && call.name ? "· " + call.name : "";
     showStats(call);
   }
+  $("copyAnswer").addEventListener("click", (e) => copyText(sources.get($("answer")) ?? "", e.target));
 
+  // ---------------------------------------------------------------- attached files
+  let attached = [];  // {name, size, data: base64}
+  const size = (n) => n < 1024 * 1024 ? (n / 1024).toFixed(0) + " KB" : (n / 1024 / 1024).toFixed(1) + " MB";
+  function drawFiles() {
+    $("fileList").innerHTML = attached.map((f, i) =>
+      `<li><span>${esc(f.name)} <span class="muted">${size(f.size)}</span></span><button type="button" class="ghost" data-remove="${i}">Remove</button></li>`).join("");
+    $("fileCount").textContent = attached.length ? `(${attached.length} attached)` : "";
+  }
+  const toBase64 = (file) => new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result.slice(r.result.indexOf(",") + 1));
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
+  async function addFiles(list) {
+    for (const file of [...list]) {
+      const data = await toBase64(file);
+      attached = attached.filter((f) => f.name !== file.name);
+      attached.push({ name: file.name, size: file.size, data });
+    }
+    drawFiles();
+  }
+  $("pickFiles").addEventListener("click", () => $("fileInput").click());
+  $("fileInput").addEventListener("change", async () => { await addFiles($("fileInput").files); $("fileInput").value = ""; });
+  $("fileList").addEventListener("click", (e) => {
+    if (e.target.dataset.remove === undefined) return;
+    attached.splice(Number(e.target.dataset.remove), 1);
+    drawFiles();
+  });
+  $("drop").addEventListener("dragover", (e) => { e.preventDefault(); $("drop").classList.add("over"); });
+  $("drop").addEventListener("dragleave", () => $("drop").classList.remove("over"));
+  $("drop").addEventListener("drop", (e) => { e.preventDefault(); $("drop").classList.remove("over"); addFiles(e.dataTransfer.files); });
+
+  // ---------------------------------------------------------------- starting runs
+  const nRuns = () => Math.max(1, parseInt($("runs").value, 10) || 1);
+  function nextRunFor(series) { const t = currentTrial(); return t ? ((t.series_counts || {})[series] || 0) + 1 : 1; }
+  function syncRuns() {
+    const n = nRuns(), mins = Math.max(0, Number($("interval").value) || 0), t = currentTrial();
+    $("intervalField").style.opacity = n > 1 ? 1 : 0.4;
+    $("interval").disabled = n === 1;
+    $("send").textContent = n > 1 ? `Start ${n} runs` : "Start run";
+    if (!t) { $("runsHint").textContent = "Choose or create a clinical trial first."; return; }
+    const series = $("series").value.trim();
+    const label = [t.name, series].filter(Boolean).join(" ");
+    const hours = ((n - 1) * mins) / 60;
+    $("runsHint").textContent = `Named “${label} run…”, numbered after this series' existing runs.` + (n > 1
+      ? ` Takes at least ${hours >= 1 ? hours.toFixed(1) + " h" : Math.round(hours * 60) + " min"} plus the time of the runs; keep the server running and the computer awake.` : "");
+  }
+  ["runs", "interval", "series"].forEach((id) => $(id).addEventListener("input", () => { syncRuns(); save(); }));
+  ["system", "prompt", "model", "temperature"].forEach((id) => $(id).addEventListener("input", save));
+  $("effort").addEventListener("change", save);
+  $("reasoning").addEventListener("change", () => { syncTemp(); save(); });
+  $("webSearch").addEventListener("change", () => { syncWeb(); save(); });
+  $("prompt").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) $("form").requestSubmit(); });
+
+  function requestBody() {
+    const temp = $("temperature").value.trim();
+    return {
+      trial_id: $("trialSelect").value, series: $("series").value, system: $("system").value, prompt: $("prompt").value,
+      model: $("model").value, reasoning: $("reasoning").checked, temperature: temp === "" ? null : Number(temp),
+      web_search: $("webSearch").checked, effort: $("effort").value, files: attached.map(({ name, data }) => ({ name, data })),
+      prompt_parts: promptLog(),
+    };
+  }
+  // Logged with each run: which parts the prompt was built from, and whether it was then edited by hand.
+  function promptLog() {
+    const t = currentTrial();
+    if (!t) return null;
+    const p = promptParts(t), s = t.summary;
+    return {
+      ...p, edited_by_hand: $("prompt").value.trim() !== autoPrompt(t).trim(),
+      ...(s ? { summary_created: s.created, summary_model: s.model, summary_edited: !!s.edited, documents: s.documents || [] } : {}),
+    };
+  }
   $("form").addEventListener("submit", async (e) => {
     e.preventDefault();
     save();
-    $("error").classList.add("hidden");
+    showError("");
+    if (!currentTrial()) return showError("Choose or create a clinical trial first.");
+    if (nRuns() > 1) {
+      const res = await fetch("/api/batch", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...requestBody(), runs: nRuns(), interval_minutes: Math.max(0, Number($("interval").value) || 0) }),
+      });
+      const data = await res.json();
+      if (!res.ok) return showError(data.error || res.statusText);
+      batchSeen = -1;
+      return pollBatch();
+    }
     $("send").disabled = true;
     const started = Date.now();
     const timer = setInterval(() => { $("status").textContent = `  Waiting… ${((Date.now() - started) / 1000).toFixed(0)} s`; }, 250);
     try {
-      const temp = $("temperature").value.trim();
-      const res = await fetch("/api/ask", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: $("name").value, system: $("system").value, prompt: $("prompt").value, model: $("model").value,
-          reasoning: $("reasoning").checked, temperature: temp === "" ? null : Number(temp),
-          web_search: $("webSearch").checked, effort: $("effort").value,
-        }),
-      });
+      const res = await fetch("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(requestBody()) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || res.statusText);
-      showResult(data.answer, data.reasoning, data.call);
-      loadHistory();
+      showResult(data.call);
+      await loadTrials();
+      onTrialChange();
     } catch (err) {
-      $("error").textContent = err.message;
-      $("error").classList.remove("hidden");
+      showError(err.message);
     } finally {
       clearInterval(timer);
       $("status").textContent = "";
-      $("send").disabled = false;
+      $("send").disabled = !currentTrial() || batchRunning;
     }
   });
 
-  $("prompt").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) $("form").requestSubmit(); });
-  $("reasoning").addEventListener("change", () => { syncTemp(); save(); });
-  ["name", "system", "prompt", "model", "temperature"].forEach((id) => $(id).addEventListener("input", save));
-  $("effort").addEventListener("change", save);
-
-  let history = [];
-  // Case names seen so far, offered as suggestions in the name and filter boxes.
-  const knownNames = new Set();
-  function addNames(calls) {
-    calls.forEach((c) => c.name && knownNames.add(c.name));
-    $("nameList").innerHTML = [...knownNames].sort().map((n) => `<option value="${esc(n)}">`).join("");
+  // ---------------------------------------------------------------- repeated runs (done by the server)
+  let batchTimer = null, batchSeen = -1, batchRunning = false;
+  function showBatch(b) {
+    if (!b) { $("batchBox").classList.add("hidden"); return; }
+    $("batchBox").classList.remove("hidden");
+    const finished = b.done + b.failed;
+    const label = { running: "Running", finished: "Finished", stopped: "Stopped", failed: "Stopped after repeated errors" }[b.state];
+    $("batchTitle").textContent = `${label}: ${finished} of ${b.runs} runs · ${b.first_name} … run${b.last_run} · ${b.model}`;
+    $("batchBar").style.width = (100 * finished / b.runs) + "%";
+    $("batchStop").classList.toggle("hidden", b.state !== "running");
+    let text = b.failed ? `${b.done} succeeded, ${b.failed} failed. ` : "";
+    if (b.current) text += `Now running ${b.current}…`;
+    else if (b.next_at) text += `Next run at ${new Date(b.next_at * 1000).toLocaleTimeString()}.`;
+    $("batchText").textContent = text;
+    $("batchErrors").innerHTML = b.errors.map((e) => `<li>${esc(e)}</li>`).join("");
   }
-  const snippet = (c, n) => esc((c.prompt || "").slice(0, n)) + ((c.prompt || "").length > n ? "…" : "");
+  async function pollBatch() {
+    clearTimeout(batchTimer);
+    let b;
+    try { b = (await fetch("/api/batch").then((r) => r.json())).batch; } catch { batchTimer = setTimeout(pollBatch, 5000); return; }
+    showBatch(b);
+    batchRunning = !!b && b.state === "running";
+    $("send").disabled = !currentTrial() || batchRunning;
+    if (!b) return;
+    const finished = b.done + b.failed;
+    if (finished !== batchSeen) {
+      batchSeen = finished;
+      await loadTrials();
+      if ($("trialSelect").value === b.trial_id) {
+        await loadResults();
+        const latest = trialCalls.filter((c) => (c.series || "") === b.series).sort((x, y) => (y.run || 0) - (x.run || 0))[0];
+        if (latest && b.done) showResult(latest);
+      }
+    }
+    if (batchRunning) batchTimer = setTimeout(pollBatch, 3000);
+  }
+  $("batchStop").addEventListener("click", async () => {
+    if (!confirm("Stop after the current run? Runs already done are kept.")) return;
+    showBatch((await fetch("/api/batch/stop", { method: "POST" }).then((r) => r.json())).batch);
+  });
 
-  async function loadHistory() {
-    const q = $("filter").value.trim();
-    history = (await fetch("/api/history?q=" + encodeURIComponent(q)).then((r) => r.json())).calls;
-    addNames(history);
-    if (!history.length) { $("history").innerHTML = `<span class="muted">${q ? "No calls with that case name." : "No calls yet."}</span>`; return; }
-    $("history").innerHTML = history.map((c, i) => `
-      <div class="item">
-      <input type="checkbox" class="pick" data-pick="${i}" title="Select for copying" ${selected.has(keyOf(c)) ? "checked" : ""}>
-      <details>
-        <summary>${c.name ? `<span class="case">${esc(c.name)}</span> <span class="muted">— ${snippet(c, 70)}</span>` : snippet(c, 110)}
-          <span class="muted">${esc(new Date(c.timestamp).toLocaleString())} · ${esc(c.model_returned || c.model_requested)} · ${money(c.cost_usd)} · effort ${esc(effortOf(c))} · <b class="runtime">${secs(c.seconds)}</b></span>${c.web_search ? '<span class="badge">web search</span>' : ""}
-        </summary>
-        <div class="history-body">
-          ${c.system ? `<div><label>System</label><pre>${esc(c.system)}</pre></div>` : ""}
+  // ---------------------------------------------------------------- priors in the answers
+  // New format: percentiles on the natural scale (prior_p05 … prior_p95, effect_measure, ...).
+  // Old format: "prior_mean" / "prior_sd" already on the log scale.
+  const Z = [-1.6449, -0.6745, 0, 0.6745, 1.6449];            // standard-normal 5/25/50/75/95th percentiles
+  const QKEYS = ["prior_p05", "prior_p25", "prior_median", "prior_p75", "prior_p95"];
+  const RATIO = /^(hr|rr|or|rate[_ ]?ratio|ratio|hazard|risk ratio|odds)/i;
+  function answerJson(text) {
+    if (!text) return null;
+    const tries = [text.trim(), text.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, "")];
+    const i = text.indexOf("{"), j = text.lastIndexOf("}");
+    if (i >= 0 && j > i) tries.push(text.slice(i, j + 1));
+    for (const t of tries) { try { const o = JSON.parse(t); if (o && typeof o === "object") return o; } catch {} }
+    return null;
+  }
+  function field(c, obj, key) {
+    let v = obj ? obj[key] : undefined;
+    if (v === undefined) {
+      const m = (c.answer || "").match(new RegExp(`"${key}"\\s*:\\s*"?(-?\\d+(?:\\.\\d+)?(?:[eE][-+]?\\d+)?)`));
+      v = m ? m[1] : null;
+    }
+    return v === null || v === "" || isNaN(Number(v)) ? null : Number(v);
+  }
+  function normCdf(x) {  // Abramowitz-Stegun 7.1.26, error < 1e-7
+    const t = 1 / (1 + 0.3275911 * Math.abs(x) / Math.SQRT2);
+    const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x / 2);
+    return x >= 0 ? (1 + y) / 2 : (1 - y) / 2;
+  }
+  const priorCache = new WeakMap();
+  function priorOf(c) { if (!priorCache.has(c)) priorCache.set(c, readPrior(c)); return priorCache.get(c); }
+  // {kind, measure, ratio, q, mean, sd, pBetter, pImplied, issues} or null; mean/sd on the log scale for ratios.
+  function readPrior(c) {
+    const obj = answerJson(c.answer);
+    const q = QKEYS.map((k) => field(c, obj, k));
+    if (q.every((x) => x === null)) {
+      const mean = field(c, obj, "prior_mean"), sd = field(c, obj, "prior_sd");
+      if (mean === null && sd === null) return null;
+      return { kind: "legacy", measure: "HR", ratio: true, mean, sd, median: field(c, obj, "implied_median_natural_scale"), issues: [] };
+    }
+    const measure = String((obj && obj.effect_measure) || "HR").trim();
+    const ratio = RATIO.test(measure);
+    const p = { kind: "quantiles", measure, ratio, q, mean: null, sd: null, pBetter: field(c, obj, "probability_experimental_better"), pImplied: null,
+                aware: obj && obj.awareness_of_target_trial_result, issues: [] };
+    if (q.some((x) => x === null)) { p.issues.push("Some percentiles are missing."); return p; }
+    if (!q.every((x, i) => i === 0 || x > q[i - 1])) { p.issues.push(`Percentiles are not in increasing order: ${q.join(", ")}.`); return p; }
+    if (ratio && q[0] <= 0) { p.issues.push(`A ${measure} cannot be 0 or negative.`); return p; }
+    const x = q.map((v) => ratio ? Math.log(v) : v);         // normal fit to all five percentiles (log scale for ratios)
+    p.mean = x.reduce((a, v) => a + v, 0) / 5;
+    p.sd = Z.reduce((a, z, i) => a + z * x[i], 0) / Z.reduce((a, z) => a + z * z, 0);
+    const scale = ratio ? "on the log scale" : "", ln = ratio ? "log-" : "";
+    const lop = (x[4] - x[2]) / (x[2] - x[0]);
+    if (lop > 1.5 || lop < 1 / 1.5) p.issues.push(`The 90% range is lopsided ${scale}: the ${lop > 1 ? "upper" : "lower"} half is ${(lop > 1 ? lop : 1 / lop).toFixed(1)}× the other, so a ${ln}normal prior fits poorly.`);
+    const shape = (x[3] - x[1]) / (x[4] - x[0]);
+    if (shape < 0.28) p.issues.push(`The 50% range is narrow compared with the 90% range (${shape.toFixed(2)}, normal: 0.41): heavier tails than a ${ln}normal.`);
+    if (shape > 0.55) p.issues.push(`The 50% range is wide compared with the 90% range (${shape.toFixed(2)}, normal: 0.41): lighter tails than a ${ln}normal.`);
+    const dir = String((obj && obj.benefit_direction) || "").match(/(<|>)\s*-?\d/);
+    if (dir && p.sd > 0) {
+      const below = normCdf((0 - p.mean) / p.sd);
+      p.pImplied = dir[1] === "<" ? below : 1 - below;
+      if (p.pBetter !== null && Math.abs(p.pBetter - p.pImplied) > 0.10)
+        p.issues.push(`Stated P(experimental better) = ${p.pBetter}, but the percentiles imply ${p.pImplied.toFixed(2)}.`);
+    }
+    return p;
+  }
+  const measureLabel = (p) => p.ratio ? (p.kind === "legacy" ? "HR" : p.measure.toUpperCase().replace("RATE_RATIO", "Rate ratio")) : p.measure.replace("_", " ");
+  const fmtEffect = (ratio, v) => v == null ? "–" : ratio ? Number(v).toFixed(2) : Number(v).toPrecision(3);
+  function priorText(p) {
+    if (p.kind === "legacy") return `log mean ${p.mean ?? "–"} · SD ${p.sd ?? "–"}${p.median !== null ? ` · median ${p.median}` : ""}`;
+    let t = `${measureLabel(p)} ${fmtEffect(p.ratio, p.q[2])} (90%: ${fmtEffect(p.ratio, p.q[0])}–${fmtEffect(p.ratio, p.q[4])})`;
+    if (p.mean !== null) t += ` · ${p.ratio ? "log " : ""}μ ${p.mean.toFixed(3)}, σ ${p.sd.toFixed(3)}`;
+    if (p.pBetter !== null) t += ` · P(better) ${p.pBetter}`;
+    return t;
+  }
+  const usable = (p) => p && p.mean !== null && p.sd !== null && p.sd > 0;
+
+  // ---------------------------------------------------------------- results for a trial
+  let trialCalls = [];
+  const hiddenSeries = new Set();
+  const COLORS = ["--s1", "--s2", "--s3", "--s4", "--s5", "--s6", "--s7", "--s8"];
+  const seriesName = (s) => s || "(no series name)";
+
+  // Series in order of their first run, so a series keeps its colour as runs are added or hidden.
+  function seriesGroups(calls) {
+    const groups = new Map();
+    [...calls].sort((a, b) => a.timestamp.localeCompare(b.timestamp)).forEach((c) => {
+      const s = c.series || "";
+      if (!groups.has(s)) groups.set(s, { series: s, calls: [] });
+      groups.get(s).calls.push(c);
+    });
+    return [...groups.values()].map((g, i) => {
+      g.calls.sort((a, b) => (a.run || 0) - (b.run || 0));
+      g.color = i < COLORS.length ? `var(${COLORS[i]})` : "var(--ink-muted)";
+      g.priors = g.calls.map(priorOf).filter(usable);
+      g.summary = summarise(g.priors);
+      return g;
+    });
+  }
+  function summarise(priors) {
+    if (!priors.length) return null;
+    const kinds = new Set(priors.map((p) => p.kind + (p.ratio ? "" : ":" + p.measure)));
+    if (kinds.size > 1) return { mixed: true, n: priors.length };
+    const avg = (xs) => xs.reduce((a, x) => a + x, 0) / xs.length;
+    const means = priors.map((p) => p.mean), m = avg(means);
+    const between = means.length > 1 ? Math.sqrt(means.reduce((a, x) => a + (x - m) ** 2, 0) / (means.length - 1)) : 0;
+    const pooled = Math.sqrt(avg(priors.map((p) => p.sd ** 2)) + avg(means.map((x) => (x - m) ** 2)));  // mixture SD
+    return { n: priors.length, mean: m, between, pooled, ratio: priors[0].ratio, measure: measureLabel(priors[0]), flagged: priors.filter((p) => p.issues.length).length };
+  }
+  function summaryText(s) {
+    if (!s) return "no priors";
+    if (s.mixed) return `${s.n} priors in different formats; no summary`;
+    const nat = s.ratio
+      ? `pooled ${s.measure} ${Math.exp(s.mean).toFixed(2)} (90%: ${Math.exp(s.mean - 1.6449 * s.pooled).toFixed(2)}–${Math.exp(s.mean + 1.6449 * s.pooled).toFixed(2)})`
+      : `pooled ${s.measure} ${s.mean.toPrecision(3)} (90%: ${(s.mean - 1.6449 * s.pooled).toPrecision(3)}–${(s.mean + 1.6449 * s.pooled).toPrecision(3)})`;
+    return `${s.n} prior${s.n > 1 ? "s" : ""} · ${nat} · ${s.ratio ? "log " : ""}mean ${s.mean.toFixed(3)} · SD between runs ${s.between.toFixed(3)} · pooled SD ${s.pooled.toFixed(3)}` +
+      (s.flagged ? ` · ⚠ ${s.flagged} flagged` : "");
+  }
+
+  // adopt: the trial was just chosen, so take over its latest run's settings and answer (or clear them).
+  async function loadResults(adopt = false) {
+    const id = $("trialSelect").value;
+    const t = currentTrial();
+    $("trialResults").classList.toggle("hidden", id === NO_TRIAL);
+    $("looseCalls").classList.toggle("hidden", id !== NO_TRIAL);
+    if (id === NO_TRIAL) { $("resultsTitle").textContent = "Calls without a trial"; $("resultsNote").textContent = "Read-only list of calls made before trials existed."; return loadLoose(); }
+    if (!t) { $("resultsTitle").textContent = "Runs"; $("runsTable").innerHTML = '<span class="muted">Create a clinical trial to start.</span>'; $("plotBox").classList.add("hidden"); return; }
+    const calls = (await fetch("/api/history?trial=" + encodeURIComponent(id)).then((r) => r.json())).calls;
+    if ($("trialSelect").value !== id) return;  // another trial was chosen meanwhile
+    trialCalls = calls;
+    if (adopt) {
+      const latest = trialCalls[0];  // newest first
+      if (latest) { loadSettings(latest); showResult(latest); }
+      else {
+        showResult(null);
+        paint($("answer"), `No runs for ${t.name} yet. Start one and its answer appears here.`);
+      }
+    }
+    $("resultsTitle").textContent = `Runs for ${t.name}`;
+    const r = t.result;
+    $("resultsNote").textContent = r ? `Reported result: ${r.measure.replace("_", " ")} ${r.estimate}${r.lower != null ? ` (95% CI ${r.lower}–${r.upper})` : ""}${r.source ? " · " + r.source : ""}` : "";
+    const groups = seriesGroups(trialCalls);
+    renderTable(groups);
+    renderPlot(groups, t);
+  }
+
+  function renderTable(groups) {
+    if (!groups.length) { $("runsTable").innerHTML = '<span class="muted">No runs yet for this trial.</span>'; return; }
+    const head = `<tr><th></th><th>Run</th><th>Prior (median, 90% range)</th><th class="num">μ</th><th class="num">σ</th><th class="num">P(better)</th><th>Knows result</th><th>Model</th><th class="num">Cost</th><th class="num">Time</th><th>When</th></tr>`;
+    const rows = groups.map((g) => {
+      const header = `<tr class="series-row"><td><input type="checkbox" data-series="${esc(g.series)}" title="Show in the plot" ${hiddenSeries.has(g.series) ? "" : "checked"}></td>
+        <td colspan="10"><span class="swatch" style="background:${g.color}"></span>${esc(seriesName(g.series))}<span class="sum">${esc(summaryText(g.summary))}</span></td></tr>`;
+      return header + g.calls.map((c) => {
+        const p = priorOf(c), k = keyOf(c);
+        const prior = !p ? '<span class="muted">no prior found</span>'
+          : p.kind === "legacy" ? `<span class="muted">old format</span> log μ ${p.mean ?? "–"}`
+          : `${measureLabel(p)} ${fmtEffect(p.ratio, p.q[2])} <span class="muted">(${fmtEffect(p.ratio, p.q[0])}–${fmtEffect(p.ratio, p.q[4])})</span>`;
+        const warn = p && p.issues.length ? `<span class="badge" title="${esc(p.issues.join("\n"))}">⚠ check</span>` : "";
+        return `<tr class="run" data-key="${esc(k)}">
+          <td><input type="checkbox" class="pick" data-pick="${esc(k)}" ${selected.has(k) ? "checked" : ""}></td>
+          <td>run${c.run ?? "?"}</td><td>${prior}${warn}</td>
+          <td class="num">${p && p.mean !== null ? p.mean.toFixed(3) : "–"}</td><td class="num">${p && p.sd !== null ? p.sd.toFixed(3) : "–"}</td>
+          <td class="num">${p && p.pBetter != null ? p.pBetter : "–"}</td><td>${esc((p && p.aware) || "–")}</td>
+          <td>${esc(c.model_returned || c.model_requested)}${c.web_search ? '<span class="badge">web</span>' : ""}</td>
+          <td class="num">${money(c.cost_usd)}</td><td class="num">${secs(c.seconds)}</td>
+          <td class="muted">${esc(new Date(c.timestamp).toLocaleString())}</td></tr>`;
+      }).join("");
+    }).join("");
+    $("runsTable").innerHTML = `<div style="overflow-x:auto"><table class="runs">${head}${rows}</table></div>`;
+  }
+  const findCall = (key) => trialCalls.find((c) => keyOf(c) === key) || looseCalls.find((c) => keyOf(c) === key);
+  function detailHtml(c) {
+    const p = priorOf(c);
+    return `<div class="detail-body">
+      ${p && p.issues.length ? `<div class="warn"><b>Check this prior:</b><ul style="margin:4px 0 0;padding-left:1.2em">${p.issues.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
+      <div><label>Answer</label><div class="md" data-answer="${esc(keyOf(c))}"></div></div>
+      ${c.reasoning_summary ? `<details><summary class="muted">Reasoning (summary)</summary><div class="md" data-reasoning="${esc(keyOf(c))}"></div></details>` : ""}
+      <details><summary class="muted">Prompt${c.system ? " and system instructions" : ""}${c.files ? " and attached files" : ""}</summary>
+        <div class="detail-body" style="margin-top:8px">
           <div><label>Prompt</label><pre>${esc(c.prompt)}</pre></div>
-          ${c.reasoning_summary ? `<div><label>Reasoning (summary)</label><div class="md" data-h="${i}" data-f="reasoning_summary"></div></div>` : ""}
-          <div><label>Answer</label><div class="md" data-h="${i}" data-f="answer"></div></div>
-          ${c.web_search ? `<div>${webHtml(c)}</div>` : ""}
-          <div class="actions">
-            <button type="button" class="ghost" data-reuse="${i}">${window.EXPORT ? "Show here" : "Load into editor"}</button>
-            <button type="button" class="ghost" data-copy="${i}">Copy answer</button>
-          </div>
-        </div>
-      </details>
-      </div>`).join("");
-    $("history").querySelectorAll("[data-h]").forEach((el) => paint(el, history[el.dataset.h][el.dataset.f]));
+          ${c.system ? `<div><label>System instructions</label><pre>${esc(c.system)}</pre></div>` : ""}
+          ${c.files ? `<div><label>Attached files</label><pre>${esc(c.files.map((f) => f.filename).join("\n"))}</pre></div>` : ""}
+        </div></details>
+      <div class="actions">
+        <button type="button" class="ghost" data-show="${esc(keyOf(c))}">Show in the answer panel</button>
+        ${window.EXPORT ? "" : `<button type="button" class="ghost" data-load="${esc(keyOf(c))}">Load these settings</button>`}
+        <button type="button" class="ghost" data-copy="${esc(keyOf(c))}">Copy answer</button>
+        ${window.EXPORT ? "" : `<button type="button" class="ghost danger" data-delete="${esc(keyOf(c))}">Delete run</button>`}
+      </div></div>`;
+  }
+  // Fill in the answers (and reasoning) of run details just added under root, rendered like the answer panel.
+  function paintAnswers(root) {
+    root.querySelectorAll("[data-answer]").forEach((el) => paint(el, findCall(el.dataset.answer).answer || "(empty answer)"));
+    root.querySelectorAll("[data-reasoning]").forEach((el) => paint(el, findCall(el.dataset.reasoning).reasoning_summary || ""));
+  }
+  $("runsTable").addEventListener("change", (e) => {
+    if (e.target.dataset.series !== undefined) {
+      const s = e.target.dataset.series;
+      if (e.target.checked) hiddenSeries.delete(s); else hiddenSeries.add(s);
+      renderPlot(seriesGroups(trialCalls), currentTrial());
+    } else if (e.target.dataset.pick !== undefined) {
+      const c = findCall(e.target.dataset.pick);
+      if (e.target.checked) selected.set(keyOf(c), c); else selected.delete(keyOf(c));
+      syncSelected();
+    }
+  });
+  $("runsTable").addEventListener("click", (e) => {
+    if (e.target.closest("input")) return;
+    if (handleActions(e)) return;
+    const row = e.target.closest("tr.run");
+    if (!row) return;
+    const next = row.nextElementSibling;
+    if (next && next.classList.contains("detail-row")) { next.remove(); return; }
+    const c = findCall(row.dataset.key);
+    row.insertAdjacentHTML("afterend", `<tr class="detail-row"><td></td><td colspan="10" class="detail">${detailHtml(c)}</td></tr>`);
+    paintAnswers(row.nextElementSibling);
+    showResult(c);
+  });
+  function handleActions(e) {
+    const d = e.target.dataset;
+    if (d.show !== undefined) { showResult(findCall(d.show)); window.scrollTo({ top: $("answer").getBoundingClientRect().top + scrollY - 80, behavior: "smooth" }); return true; }
+    if (d.copy !== undefined) { copyText(findCall(d.copy).answer || "", e.target); return true; }
+    if (d.delete !== undefined) { deleteCall(findCall(d.delete)); return true; }
+    if (d.load !== undefined) {
+      loadSettings(findCall(d.load));
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return true;
+    }
+    return false;
+  }
+  // Put a logged run's settings into the runs form.
+  function loadSettings(c) {
+    $("series").value = c.series || ""; $("system").value = c.system || ""; $("prompt").value = c.prompt || "";
+    setModel(c.model_requested || $("model").value);
+    $("effort").value = c.reasoning_effort_requested || "";
+    $("temperature").value = c.temperature ?? "";
+    $("webSearch").checked = !!c.web_search; syncWeb(); syncRuns(); save();
+    if (c.files && c.files.length) showError("This run had attached files, which the log does not store. Attach them again before starting: " + c.files.map((f) => f.filename).join(", "));
   }
 
-  // ---- Copying ----
+  async function deleteCall(c) {
+    const label = c.name || `the call of ${new Date(c.timestamp).toLocaleString()}`;
+    if (!confirm(`Delete ${label}?
+
+It is removed from the results and plot, and moved to code/logs/deleted_calls.jsonl (not erased).`)) return;
+    const res = await fetch("/api/calls/delete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: keyOf(c) }) });
+    const data = await res.json();
+    if (!res.ok) return showError(data.error || "Could not delete the run.");
+    showError("");
+    selected.delete(keyOf(c)); syncSelected();
+    await loadTrials();
+    await loadResults();
+  }
+
+  // Calls that belong to no saved trial (the older flat list).
+  let looseCalls = [];
+  const snippet = (c, n) => esc((c.prompt || "").slice(0, n)) + ((c.prompt || "").length > n ? "…" : "");
+  async function loadLoose() {
+    const q = $("filter").value.trim();
+    looseCalls = (await fetch(`/api/history?trial=&q=${encodeURIComponent(q)}`).then((r) => r.json())).calls;
+    if (!looseCalls.length) { $("history").innerHTML = `<span class="muted">${q ? "No calls with that case name." : "No calls."}</span>`; return; }
+    $("history").innerHTML = looseCalls.map((c) => {
+      const p = priorOf(c);
+      return `<div class="item"><input type="checkbox" class="pick" data-pick="${esc(keyOf(c))}" ${selected.has(keyOf(c)) ? "checked" : ""}>
+        <details><summary>${c.name ? `<b>${esc(c.name)}</b>` : ""}${p ? `<span class="prior">${esc(priorText(p))}</span>` : ""}
+          <span class="muted">${c.name ? "— " : ""}${snippet(c, 60)} · ${esc(new Date(c.timestamp).toLocaleString())} · ${esc(c.model_returned || c.model_requested)} · ${money(c.cost_usd)}</span></summary>
+          <div style="margin-top:8px">${detailHtml(c)}</div></details></div>`;
+    }).join("");
+    paintAnswers($("history"));
+  }
+  $("history").addEventListener("click", (e) => { if (handleActions(e)) e.preventDefault(); });
+  $("history").addEventListener("change", (e) => {
+    if (e.target.dataset.pick === undefined) return;
+    const c = findCall(e.target.dataset.pick);
+    if (e.target.checked) selected.set(keyOf(c), c); else selected.delete(keyOf(c));
+    syncSelected();
+  });
+  let filterTimer;
+  $("filter").addEventListener("input", () => { clearTimeout(filterTimer); filterTimer = setTimeout(loadLoose, 250); });
+
+  // ---------------------------------------------------------------- plot of the priors
+  const SVGNS = "http://www.w3.org/2000/svg";
+  const normPdf = (x, m, s) => Math.exp(-0.5 * ((x - m) / s) ** 2) / (s * Math.sqrt(2 * Math.PI));
+  function ticksFor(lo, hi, ratio) {
+    if (ratio) {
+      // Round values first; finer ones only when the range is narrow.
+      const inRange = (vs) => vs.filter((v) => Math.log(v) >= lo && Math.log(v) <= hi);
+      let t = inRange([0.05, 0.1, 0.2, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5, 10, 20]);
+      if (t.length < 5) t = inRange([0.05, 0.1, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.25, 1.5, 2, 3, 5, 10, 20]);
+      while (t.length > 10) t = t.filter((v, i) => i % 2 === 0 || v === 1);
+      return t.map((v) => ({ at: Math.log(v), label: String(v) }));
+    }
+    const span = hi - lo, step = Math.pow(10, Math.floor(Math.log10(span / 6)));
+    const nice = [1, 2, 2.5, 5, 10].map((k) => k * step).find((s) => span / s <= 8);
+    const out = [];
+    for (let v = Math.ceil(lo / nice) * nice; v <= hi + 1e-9; v += nice) out.push({ at: v, label: String(+v.toFixed(6)) });
+    return out;
+  }
+  let lastPlot = null;  // [groups, trial], to redraw when the axis choice changes
+  try { const s = localStorage.getItem("playgroundPlotScale"); if (["hr", "log", "lin"].includes(s)) $("plotScale").value = s; } catch {}
+  $("plotScale").addEventListener("change", () => {
+    try { localStorage.setItem("playgroundPlotScale", $("plotScale").value); } catch {}
+    if (lastPlot) renderPlot(...lastPlot);
+  });
+  function renderPlot(groups, trial) {
+    lastPlot = [groups, trial];
+    const shown = groups.filter((g) => !hiddenSeries.has(g.series) && g.priors.length && g.summary && !g.summary.mixed);
+    if (!shown.length) { $("plotBox").classList.add("hidden"); return; }
+    $("plotBox").classList.remove("hidden");
+    const ratio = shown[0].priors[0].ratio, measure = measureLabel(shown[0].priors[0]);
+    $("plotScaleRow").classList.toggle("hidden", !ratio);
+    [`${measure} values, log-spaced axis`, `log ${measure} values`, `${measure} values, linear axis`]
+      .forEach((t, i) => { $("plotScale").options[i].textContent = t; });
+    // Plot coordinate u: "hr" = log value (labelled in natural values), "log" = log value, "lin" = natural value.
+    const mode = ratio ? $("plotScale").value : "log";
+    const plotted = shown.filter((g) => g.priors[0].ratio === ratio);
+    const ref = trial && trial.result && trial.result.estimate != null ? trial.result : null;
+    const T = (v) => ratio ? Math.log(v) : v;           // natural value -> analysis (log) scale
+    const U = (v) => mode === "lin" ? v : T(v);         // natural value -> plot coordinate
+    const A = (u) => mode === "lin" ? Math.log(u) : u;  // plot coordinate -> analysis scale
+    const natural = (u) => mode === "lin" || !ratio ? u : Math.exp(u);
+    const label = (u) => mode === "log" && ratio ? `log ${measure} ${u.toFixed(2)}` : `${measure} ${fmtEffect(ratio, natural(u))}`;
+    // density in the plot coordinate (on a linear axis: the log-normal density, with the 1/x Jacobian)
+    const dens = (u, p) => mode === "lin" ? (u > 0 ? normPdf(Math.log(u), p.mean, p.sd) / u : 0) : normPdf(u, p.mean, p.sd);
+
+    // x range: every run's 99% range, the no-effect value, and the reported result (on the analysis scale)
+    const all = plotted.flatMap((g) => g.priors);
+    const k = mode === "lin" ? 2.3 : 2.6;  // the upper tail of a log-normal is long on a linear axis
+    let lo = Math.min(...all.map((p) => p.mean - k * p.sd), 0), hi = Math.max(...all.map((p) => p.mean + k * p.sd), 0);
+    if (ref) { lo = Math.min(lo, T(ref.lower ?? ref.estimate)); hi = Math.max(hi, T(ref.upper ?? ref.estimate)); }
+    if (mode === "lin") { lo = Math.exp(lo); hi = Math.exp(hi); }
+    const pad = (hi - lo) * 0.04; lo -= pad; hi += pad;
+    if (mode === "lin") lo = Math.max(lo, 0);
+    const zero = mode === "lin" ? 1 : 0;  // no-effect value in the plot coordinate
+
+    const W = 960, H = 320, m = { l: 16, r: 16, t: 34, b: 44 };
+    const X = (v) => m.l + (v - lo) / (hi - lo) * (W - m.l - m.r);
+    const N = 240, xs = Array.from({ length: N + 1 }, (_, i) => lo + (hi - lo) * i / N);
+    const curves = plotted.map((g) => ({
+      g,
+      runs: g.priors.map((p) => xs.map((x) => dens(x, p))),
+      pooled: xs.map((x) => g.priors.reduce((a, p) => a + dens(x, p), 0) / g.priors.length),
+    }));
+    const ymax = Math.max(...curves.flatMap((c) => [...c.pooled, ...c.runs.flat()])) * 1.05;
+    const Y = (d) => H - m.b - d / ymax * (H - m.t - m.b);
+    const path = (ys) => ys.map((y, i) => `${i ? "L" : "M"}${X(xs[i]).toFixed(1)},${Y(y).toFixed(1)}`).join("");
+
+    let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Prior distributions of each run for ${esc(trial ? trial.name : "")}, by series">`;
+    // reference band + estimate (neutral ink; never a series colour)
+    if (ref) {
+      if (ref.lower != null) svg += `<rect x="${X(U(ref.lower))}" y="${m.t}" width="${X(U(ref.upper)) - X(U(ref.lower))}" height="${H - m.t - m.b}" fill="var(--ref-band)"/>`;
+      svg += `<line x1="${X(U(ref.estimate))}" x2="${X(U(ref.estimate))}" y1="${m.t}" y2="${H - m.b}" stroke="var(--ink-2)" stroke-width="1.5"/>`;
+      svg += `<text class="ink" x="${X(U(ref.estimate))}" y="${m.t - 8}" text-anchor="middle">Reported ${esc(mode === "log" && ratio
+        ? `${fmtEffect(ratio, ref.estimate)} (log ${T(ref.estimate).toFixed(2)})` : fmtEffect(ratio, ref.estimate))}</text>`;
+    }
+    // no-effect line
+    if (zero >= lo && zero <= hi) {
+      svg += `<line x1="${X(zero)}" x2="${X(zero)}" y1="${m.t}" y2="${H - m.b}" stroke="var(--axis)" stroke-width="1"/>`;
+      svg += `<text x="${X(zero) + 4}" y="${m.t + 12}">no effect</text>`;
+    }
+    // axis + ticks
+    svg += `<line x1="${m.l}" x2="${W - m.r}" y1="${H - m.b}" y2="${H - m.b}" stroke="var(--axis)" stroke-width="1"/>`;
+    for (const t of ticksFor(lo, hi, mode === "hr")) {
+      svg += `<line x1="${X(t.at)}" x2="${X(t.at)}" y1="${H - m.b}" y2="${H - m.b + 4}" stroke="var(--axis)"/>`;
+      svg += `<text x="${X(t.at)}" y="${H - m.b + 18}" text-anchor="middle">${t.label}</text>`;
+    }
+    const axisTitle = !ratio ? measure : mode === "hr" ? `${measure} (log scale)` : mode === "log" ? `log ${measure}` : measure;
+    svg += `<text x="${W / 2}" y="${H - 6}" text-anchor="middle">${esc(axisTitle)}</text>`;
+    // single runs (thin, faint), then pooled (2px) on top
+    for (const c of curves) for (const r of c.runs)
+      svg += `<path d="${path(r)}" fill="none" stroke="${c.g.color}" stroke-width="1" stroke-opacity="0.35" stroke-linejoin="round"/>`;
+    for (const c of curves)
+      svg += `<path d="${path(c.pooled)}" fill="none" stroke="${c.g.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    // crosshair + hit area
+    svg += `<line id="xhair" class="hidden" y1="${m.t}" y2="${H - m.b}" stroke="var(--ink-muted)" stroke-width="1"/>`;
+    svg += `<rect id="hit" x="${m.l}" y="${m.t}" width="${W - m.l - m.r}" height="${H - m.t - m.b}" fill="transparent"/></svg>`;
+    $("chart").innerHTML = svg + '<div class="tip hidden" id="tip"></div>';
+
+    // Direct labels at each pooled curve's peak, only if none collide (otherwise the legend carries identity).
+    if (curves.length <= 4) {
+      const labels = curves.map((c) => {
+        const i = c.pooled.indexOf(Math.max(...c.pooled));
+        const text = seriesName(c.g.series);
+        return { x: X(xs[i]), y: Y(c.pooled[i]) - 8, w: text.length * 6.6, text };
+      });
+      // Overlapping distributions put labels on each other's curves; label only when the peaks are well apart.
+      const clash = labels.some((a, i) => labels.some((b, j) => i < j && Math.abs(a.x - b.x) < (a.w + b.w) / 2 + 24));
+      if (!clash && curves.length > 1) {
+        const svgEl = $("chart").querySelector("svg");
+        for (const l of labels) {
+          const t = document.createElementNS(SVGNS, "text");
+          t.setAttribute("x", Math.min(Math.max(l.x, m.l + l.w / 2), W - m.r - l.w / 2)); t.setAttribute("y", Math.max(l.y, m.t + 10));
+          t.setAttribute("text-anchor", "middle"); t.setAttribute("class", "ink"); t.textContent = l.text;
+          svgEl.insertBefore(t, $("xhair"));
+        }
+      }
+    }
+
+    // Legend (always for 2+ series; reference and line-weight keys too)
+    $("legend").innerHTML = (plotted.length > 1 ? plotted.map((g) => `<span class="key"><i style="background:${g.color}"></i>${esc(seriesName(g.series))} (${g.priors.length})</span>`).join("") : "") +
+      `<span class="key"><i class="thin" style="background:var(--ink-2)"></i>single run</span><span class="key"><i style="background:var(--ink-2)"></i>pooled</span>` +
+      (ref ? `<span class="key"><i class="band"></i>reported result${ref.lower != null ? " and 95% CI" : ""}</span>` : "");
+
+    // Hover: P(effect < x) under each pooled prior.
+    const svgEl = $("chart").querySelector("svg"), tip = $("tip"), xh = $("xhair");
+    $("hit").addEventListener("pointermove", (ev) => {
+      const box = svgEl.getBoundingClientRect(), sx = (ev.clientX - box.left) / box.width * W;
+      const v = lo + (sx - m.l) / (W - m.l - m.r) * (hi - lo);
+      xh.setAttribute("x1", sx); xh.setAttribute("x2", sx); xh.classList.remove("hidden");
+      tip.innerHTML = "";
+      const title = document.createElement("div"); title.className = "t";
+      title.textContent = mode === "log" && ratio ? `${label(v)} (${measure} ${fmtEffect(ratio, Math.exp(v))})` : label(v); tip.append(title);
+      const a = mode === "lin" && v <= 0 ? -Infinity : A(v);
+      for (const c of curves) {
+        const pr = c.g.priors.reduce((s, p) => s + normCdf((a - p.mean) / p.sd), 0) / c.g.priors.length;
+        const row = document.createElement("div"); row.className = "r";
+        const key = document.createElement("i"); key.style.background = c.g.color;
+        const name = document.createElement("span"); name.textContent = `P(${label(v).replace(/ (-?[\d.]+)$/, " < $1")})${curves.length > 1 ? " · " + seriesName(c.g.series) : ""}`;
+        const val = document.createElement("b"); val.textContent = pr.toFixed(2);
+        row.append(key, name, val); tip.append(row);
+      }
+      tip.classList.remove("hidden");
+      const left = ev.clientX - $("chart").getBoundingClientRect().left;
+      tip.style.left = Math.min(left + 14, $("chart").clientWidth - tip.offsetWidth - 4) + "px";
+      tip.style.top = "8px";
+    });
+    $("hit").addEventListener("pointerleave", () => { tip.classList.add("hidden"); xh.classList.add("hidden"); });
+  }
+
+  // ---------------------------------------------------------------- copying
   async function copyText(text, btn) {
     try { await navigator.clipboard.writeText(text); }
-    catch {  // older browsers / non-secure contexts
-      const t = document.createElement("textarea");
-      t.value = text; document.body.append(t); t.select(); document.execCommand("copy"); t.remove();
-    }
+    catch { const t = document.createElement("textarea"); t.value = text; document.body.append(t); t.select(); document.execCommand("copy"); t.remove(); }
     if (btn) { const old = btn.textContent; btn.textContent = "Copied!"; setTimeout(() => { btn.textContent = old; }, 1200); }
   }
-
-  // One call as Markdown: name, settings line, then prompt / reasoning / answer / sources per the options.
   function callMarkdown(c) {
+    const p = priorOf(c);
     const parts = [`## ${c.name || "(unnamed call)"}`,
       `_${new Date(c.timestamp).toLocaleString()} · ${c.model_returned || c.model_requested}${c.web_search ? " · web search" : ""} · effort ${effortOf(c)} · ${money(c.cost_usd)} · ${secs(c.seconds)}_`];
+    if (p) parts.push(`**Prior:** ${priorText(p)}` + (p.issues.length ? `\n\n⚠ ${p.issues.join(" ")}` : ""));
     if ($("incPrompt").checked) {
       if (c.system) parts.push(`**System**\n\n${c.system}`);
+      if (c.files) parts.push(`**Attached files**\n\n${c.files.map((f) => `- ${f.filename}`).join("\n")}`);
       parts.push(`**Prompt**\n\n${c.prompt || ""}`);
     }
     if ($("incReasoning").checked && c.reasoning_summary) parts.push(`**Reasoning (summary)**\n\n${c.reasoning_summary}`);
@@ -443,58 +1571,60 @@
     }
     return parts.join("\n\n");
   }
-
-  // Selected calls, kept across filter changes and reloads, keyed by response id.
   const selected = new Map();
   const keyOf = (c) => c.response_id || c.timestamp;
-  function syncSelected() {
-    $("copySelected").textContent = `Copy selected (${selected.size})`;
-    $("copySelected").disabled = selected.size === 0;
-  }
-  $("history").addEventListener("change", (e) => {
-    const i = e.target.dataset.pick;
-    if (i === undefined) return;
-    const c = history[i];
-    if (e.target.checked) selected.set(keyOf(c), c); else selected.delete(keyOf(c));
-    syncSelected();
-  });
-  $("selectShown").addEventListener("click", () => {
-    history.forEach((c) => selected.set(keyOf(c), c));
-    $("history").querySelectorAll(".pick").forEach((el) => { el.checked = true; });
-    syncSelected();
-  });
-  $("clearSelected").addEventListener("click", () => {
-    selected.clear();
-    $("history").querySelectorAll(".pick").forEach((el) => { el.checked = false; });
-    syncSelected();
-  });
+  function syncSelected() { $("copySelected").textContent = `Copy selected (${selected.size})`; $("copySelected").disabled = selected.size === 0; }
+  $("clearSelected").addEventListener("click", () => { selected.clear(); document.querySelectorAll(".pick").forEach((el) => { el.checked = false; }); syncSelected(); });
   $("copySelected").addEventListener("click", (e) => {
-    const calls = [...selected.values()].sort((a, b) => a.timestamp.localeCompare(b.timestamp));  // oldest first
+    const calls = [...selected.values()].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
     copyText(calls.map(callMarkdown).join("\n\n---\n\n") + "\n", e.target);
   });
-  $("copyAnswer").addEventListener("click", (e) => copyText(sources.get($("answer")) ?? "", e.target));
 
-  $("history").addEventListener("click", (e) => {
-    if (e.target.dataset.copy !== undefined) return copyText(history[e.target.dataset.copy].answer || "", e.target);
-    const i = e.target.dataset.reuse;
-    if (i === undefined) return;
-    const c = history[i];
-    $("name").value = c.name || "";
-    $("system").value = c.system || "";
-    $("prompt").value = c.prompt || "";
-    setModel(c.model_requested || $("model").value);
-    $("effort").value = c.reasoning_effort_requested || "";
-    $("webSearch").checked = !!c.web_search;
-    syncWeb();
-    showResult(c.answer, c.reasoning_summary, c);
-    save();
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  });
-
-  let filterTimer;
-  $("filter").addEventListener("input", () => { clearTimeout(filterTimer); filterTimer = setTimeout(loadHistory, 250); });
-
-  init().catch((err) => { $("error").textContent = "Could not reach the server: " + err.message; $("error").classList.remove("hidden"); });
+  // ---------------------------------------------------------------- start
+  async function init() {
+    const info = await fetch("/api/info").then((r) => r.json());
+    const opt = (mo) => `<option value="${esc(mo)}">${esc(mo)}${mo === info.default_model ? " (default)" : ""}</option>`;
+    const group = (label, ms) => ms.length ? `<optgroup label="${label}">${ms.map(opt).join("")}</optgroup>` : "";
+    $("modelSelect").innerHTML = group("OpenAI", info.models.filter((mo) => !/^(claude|gemini)-/.test(mo))) +
+      group("Claude (Anthropic)", info.models.filter((mo) => mo.startsWith("claude-"))) +
+      group("Gemini (Google)", info.models.filter((mo) => mo.startsWith("gemini-"))) + '<option value="__other">Other…</option>';
+    // The lookup has its own model choice (same list, without "Other…"), remembered separately.
+    $("lookupModel").innerHTML = $("modelSelect").innerHTML.replace('<option value="__other">Other…</option>', "");
+    const lookupSaved = localStorage.getItem("playgroundLookupModel");
+    $("lookupModel").value = info.models.includes(lookupSaved) ? lookupSaved : info.default_model;
+    $("lookupModel").addEventListener("change", () => { try { localStorage.setItem("playgroundLookupModel", $("lookupModel").value); } catch {} });
+    $("extractModel").innerHTML = $("lookupModel").innerHTML;
+    const extractSaved = localStorage.getItem("playgroundExtractModel");
+    $("extractModel").value = info.models.includes(extractSaved) ? extractSaved : info.default_model;
+    $("extractModel").addEventListener("change", () => { try { localStorage.setItem("playgroundExtractModel", $("extractModel").value); } catch {} });
+    setModel(saved.model || info.default_model);
+    $("series").value = saved.series || "";
+    $("system").value = saved.system || "";
+    $("prompt").value = saved.prompt || "";
+    $("inclName").checked = saved.inclName ?? true;
+    $("inclSummary").checked = saved.inclSummary ?? true;
+    $("inclPower").checked = saved.inclPower ?? false;
+    $("temperature").value = saved.temperature || "";
+    $("effort").value = saved.effort || "";
+    $("reasoning").checked = saved.reasoning ?? true;
+    $("webSearch").checked = saved.webSearch ?? false;
+    $("runs").value = saved.runs || 1;
+    $("interval").value = saved.interval ?? 5;
+    syncWeb(); syncTemp();
+    $("total").textContent = money(info.total_cost);
+    if (window.EXPORT) {
+      document.body.classList.add("export");
+      document.querySelector("header .muted").textContent = window.EXPORT.note;
+    } else if (!info.delete_calls || !info.summary) {
+      showError("The running server is out of date (missing newer features such as clinical trials or deleting runs). Stop it (Ctrl+C) and start it again: python code/playground.py");
+      return;
+    }
+    await loadTrials(saved.trial);
+    previousAuto = autoPrompt(currentTrial());
+    onTrialChange();
+    if (!window.EXPORT) pollBatch();
+  }
+  init().catch((err) => showError("Could not reach the server: " + err.message));
 </script>
 </body>
 </html>
